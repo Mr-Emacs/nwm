@@ -3,6 +3,7 @@
 #include "config.hpp"
 #include <algorithm>
 #include <X11/Xlib.h>
+#include "animations.hpp"
 
 static void ensure_focused_floating_on_top(Display *display, nwm::Base &base) {
     if (base.focused_window &&
@@ -227,8 +228,15 @@ void nwm::scroll_left(void *arg, Base &base) {
         scroll_amount = mon->width / scroll_visible;
     }
 
-    current_ws.scroll_offset = std::max(0, current_ws.scroll_offset - scroll_amount);
-    tile_horizontal(base);
+    int target_offset = std::max(0, current_ws.scroll_offset - scroll_amount);
+
+    if (base.anim_manager && base.anim_manager->animations_enabled &&
+        base.anim_manager->scroll_enabled) {
+        animate_scroll(base, target_offset);
+    } else {
+        current_ws.scroll_offset = target_offset;
+        tile_horizontal(base);
+    }
 }
 
 void nwm::scroll_right(void *arg, Base &base) {
@@ -249,9 +257,14 @@ void nwm::scroll_right(void *arg, Base &base) {
     int total_width = current_ws.windows.size() * window_width;
     int max_scroll = std::max(0, total_width - mon->width);
 
-    current_ws.scroll_offset = std::min(max_scroll,
-                                        current_ws.scroll_offset + scroll_amount);
-    tile_horizontal(base);
+    int target_offset = std::min(max_scroll, current_ws.scroll_offset + scroll_amount);
+    if (base.anim_manager && base.anim_manager->animations_enabled &&
+        base.anim_manager->scroll_enabled) {
+        animate_scroll(base, target_offset);
+    } else {
+        current_ws.scroll_offset = target_offset;
+        tile_horizontal(base);
+    }
 }
 
 void nwm::toggle_layout(void *arg, Base &base) {

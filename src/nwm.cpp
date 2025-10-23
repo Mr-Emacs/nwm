@@ -20,6 +20,7 @@
 #include <cstring>
 #include <vector>
 #include <string>
+#include "animations.hpp"
 
 int x_error_handler(Display *dpy, XErrorEvent *error) {
     char error_text[1024];
@@ -617,6 +618,12 @@ void nwm::switch_workspace(void *arg, Base &base) {
     if (target_ws < 0 || target_ws >= NUM_WORKSPACES) return;
     if (target_ws == (int)base.current_workspace) return;
 
+    // Trigger workspace switch animation if enabled
+    if (base.anim_manager && base.anim_manager->animations_enabled &&
+        base.anim_manager->workspace_switch_enabled) {
+        animate_workspace_switch(base, base.current_workspace, target_ws);
+    }
+
     for (auto &w : get_current_workspace(base).windows) {
         XUnmapWindow(base.display, w.window);
     }
@@ -666,8 +673,52 @@ void nwm::move_to_workspace(void *arg, Base &base) {
         if (it->window == base.focused_window->window) {
             ManagedWindow w = *it;
             w.workspace = target_ws;
-            current_ws.windows.erase(it);
+            
+            // Animate window close before moving if animations enabled
+            if (base.anim_manager && base.anim_manager->animations_enabled &&
+                base.anim_manager->window_close_enabled) {
+                animate_window_close(base, w.window, [&base, w, target_ws, it]() mutable {
+                    auto &curr_ws = base.workspaces[base.current_workspace];
+                    
+                    // Find and remove the window
+                    for (auto iter = curr_ws.windows.begin(); iter != curr_ws.windows.end(); ++iter) {
+                        if (iter->window == w.window) {
+                            curr_ws.windows.erase(iter);
+                            break;
+                        }
+                    }
+                    
+                    // Add to target workspace
+                    base.workspaces[target_ws].windows.push_back(w);
 
+                    Atom workspace_atom = XInternAtom(base.display, "_NWM_WORKSPACE", False);
+                    long workspace_id = target_ws;
+                    XChangeProperty(base.display, w.window, workspace_atom,
+                                  XA_CARDINAL, 32, PropModeReplace,
+                                  (unsigned char*)&workspace_id, 1);
+
+                    XUnmapWindow(base.display, w.window);
+
+                    if (curr_ws.focused_window && curr_ws.focused_window->window == w.window) {
+                        curr_ws.focused_window = nullptr;
+                    }
+                    base.focused_window = nullptr;
+
+                    if (!curr_ws.windows.empty()) {
+                        focus_window(&curr_ws.windows[0], base);
+                    }
+                    
+                    if (base.horizontal_mode) {
+                        tile_horizontal(base);
+                    } else {
+                        tile_windows(base);
+                    }
+                });
+                return;
+            }
+            
+            // No animation - immediate move
+            current_ws.windows.erase(it);
             base.workspaces[target_ws].windows.push_back(w);
 
             Atom workspace_atom = XInternAtom(base.display, "_NWM_WORKSPACE", False);
@@ -789,6 +840,12 @@ void nwm::toggle_float(void *arg, Base &base) {
     auto &current_ws = get_current_workspace(base);
     for (auto &w : current_ws.windows) {
         if (w.window == base.focused_window->window) {
+            // Store current position and size
+            int start_x = w.x;
+            int start_y = w.y;
+            int start_width = w.width;
+            int start_height = w.height;
+
             w.is_floating = !w.is_floating;
 
             if (w.is_floating) {
@@ -796,17 +853,55 @@ void nwm::toggle_float(void *arg, Base &base) {
                 if (!mon) mon = get_current_monitor(base);
                 if (!mon) return;
 
-                w.width = mon->width / 2;
-                w.height = mon->height / 2;
-                w.x = mon->x + (mon->width - w.width) / 2;
-                w.y = mon->y + (mon->height - w.height) / 2;
+                int target_width = mon->width / 2;
+                int target_height = mon->height / 2;
+                int target_x = mon->x + (mon->width - target_width) / 2;
+                int target_y = mon->y + (mon->height - target_height) / 2;
+
+                // Animate to floating position if animations enabled
+                if (base.anim_manager && base.anim_manager->animations_enabled &&
+                    (base.anim_manager->window_move_enabled || base.anim_manager->window_resize_enabled)) {
+                    animate_floating_transition(base, w.window, true,
+                                               start_x, start_y, start_width, start_height,
+                                               target_x, target_y, target_width, target_height);
+                    w.x = target_x;
+                    w.y = target_y;
+                    w.width = target_width;
+                    w.height = target_height;
+                } else {
+                    w.width = target_width;
+                    w.height = target_height;
+                    w.x = target_x;
+                    w.y = target_y;
+                    XMoveResizeWindow(base.display, w.window, w.x, w.y, w.width, w.height);
+                }
 
                 XSetWindowBorderWidth(base.display, w.window, 2);
                 XSetWindowBorder(base.display, w.window, base.focus_color);
-                XMoveResizeWindow(base.display, w.window, w.x, w.y, w.width, w.height);
                 XRaiseWindow(base.display, w.window);
                 XSetInputFocus(base.display, w.window, RevertToPointerRoot, CurrentTime);
             } else {
+                // Calculate target tiled position before animating
+                if (base.horizontal_mode) {
+                    tile_horizontal(base);
+                } else {
+                    tile_windows(base);
+                }
+
+                // Get the new tiled position
+                int target_x = w.x;
+                int target_y = w.y;
+                int target_width = w.width;
+                int target_height = w.height;
+
+                // Animate from floating to tiled if animations enabled
+                if (base.anim_manager && base.anim_manager->animations_enabled &&
+                    (base.anim_manager->window_move_enabled || base.anim_manager->window_resize_enabled)) {
+                    animate_floating_transition(base, w.window, false,
+                                               start_x, start_y, start_width, start_height,
+                                               target_x, target_y, target_width, target_height);
+                }
+
                 XSetWindowBorderWidth(base.display, w.window, base.border_width);
                 XSetWindowBorder(base.display, w.window, base.focus_color);
             }
@@ -814,10 +909,12 @@ void nwm::toggle_float(void *arg, Base &base) {
         }
     }
 
-    if (base.horizontal_mode) {
-        tile_horizontal(base);
-    } else {
-        tile_windows(base);
+    if (!base.focused_window->is_floating) {
+        if (base.horizontal_mode) {
+            tile_horizontal(base);
+        } else {
+            tile_windows(base);
+        }
     }
 }
 
@@ -1029,9 +1126,15 @@ void nwm::unmanage_window(Window window, Base &base) {
 void nwm::focus_window(ManagedWindow *window, Base &base) {
     auto &current_ws = get_current_workspace(base);
 
+    // Unfocus all windows with animated border color
     for (auto &w : current_ws.windows) {
         if (!w.is_floating && !w.is_fullscreen) {
-            XSetWindowBorder(base.display, w.window, base.border_color);
+            if (base.anim_manager && base.anim_manager->animations_enabled &&
+                base.anim_manager->border_color_enabled) {
+                animate_border_color(base, w.window, base.border_color);
+            } else {
+                XSetWindowBorder(base.display, w.window, base.border_color);
+            }
         }
         w.is_focused = false;
     }
@@ -1044,8 +1147,14 @@ void nwm::focus_window(ManagedWindow *window, Base &base) {
         base.focused_window = window;
         window->is_focused = true;
 
+        // Focus the new window with animated border color
         if (!window->is_floating && !window->is_fullscreen) {
-            XSetWindowBorder(base.display, window->window, base.focus_color);
+            if (base.anim_manager && base.anim_manager->animations_enabled &&
+                base.anim_manager->border_color_enabled) {
+                animate_border_color(base, window->window, base.focus_color);
+            } else {
+                XSetWindowBorder(base.display, window->window, base.focus_color);
+            }
         }
 
         if (window->is_floating || window->is_fullscreen) {
@@ -1176,15 +1285,35 @@ void nwm::resize_window(ManagedWindow *window, int width, int height, Base &base
 
 void nwm::close_window(void *arg, Base &base) {
     (void)arg;
-    if (base.focused_window) {
+    if (!base.focused_window) return;
+
+    Window window = base.focused_window->window;
+
+    // Use animated close if enabled, otherwise close immediately
+    if (base.anim_manager && base.anim_manager->animations_enabled &&
+        base.anim_manager->window_close_enabled) {
+
+        // Animate the close, then send close message in callback
+        animate_window_close(base, window, [&base, window]() {
+            XEvent ev;
+            ev.type = ClientMessage;
+            ev.xclient.window = window;
+            ev.xclient.message_type = XInternAtom(base.display, "WM_PROTOCOLS", True);
+            ev.xclient.format = 32;
+            ev.xclient.data.l[0] = XInternAtom(base.display, "WM_DELETE_WINDOW", False);
+            ev.xclient.data.l[1] = CurrentTime;
+            XSendEvent(base.display, window, False, NoEventMask, &ev);
+        });
+    } else {
+        // Close immediately without animation
         XEvent ev;
         ev.type = ClientMessage;
-        ev.xclient.window = base.focused_window->window;
+        ev.xclient.window = window;
         ev.xclient.message_type = XInternAtom(base.display, "WM_PROTOCOLS", True);
         ev.xclient.format = 32;
         ev.xclient.data.l[0] = XInternAtom(base.display, "WM_DELETE_WINDOW", False);
         ev.xclient.data.l[1] = CurrentTime;
-        XSendEvent(base.display, base.focused_window->window, False, NoEventMask, &ev);
+        XSendEvent(base.display, window, False, NoEventMask, &ev);
     }
 }
 
@@ -1208,6 +1337,12 @@ void nwm::handle_map_request(XMapRequestEvent *e, Base &base) {
 
     if (!current_ws.windows.empty()) {
         ManagedWindow *new_window = &current_ws.windows.back();
+
+        // Trigger window open animation
+        if (base.anim_manager && base.anim_manager->animations_enabled &&
+            base.anim_manager->window_open_enabled) {
+            animate_window_open(base, new_window->window);
+        }
 
         bool had_floating_focus = (base.focused_window && (base.focused_window->is_floating || base.focused_window->is_fullscreen));
 
@@ -1805,6 +1940,7 @@ void nwm::init(Base &base) {
 
     workspace_init(base);
     monitors_init(base);
+    animations_init(base);
 
     bar_init(base);
     systray_init(base);
@@ -1860,6 +1996,7 @@ void nwm::cleanup(Base &base) {
     }
 
     systray_cleanup(base);
+    animations_cleanup(base);
     bar_cleanup(base);
 
     if (base.xft_font) {
@@ -1959,6 +2096,8 @@ void nwm::run(Base &base) {
                     break;
             }
         }
+
+        animations_update(base);
 
         time_t now = time(nullptr);
         if (now - last_bar_update >= 10) {

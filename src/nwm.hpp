@@ -14,6 +14,11 @@
 #define NUM_WORKSPACES 9
 
 namespace nwm {
+    struct AnimationManager;
+}
+
+
+namespace nwm {
 
 struct ManagedWindow {
     Window window;
@@ -24,6 +29,7 @@ struct ManagedWindow {
     bool is_fullscreen;
     int workspace;
     int monitor;
+
 
     int pre_fs_x, pre_fs_y;
     int pre_fs_width, pre_fs_height;
@@ -49,6 +55,7 @@ struct Workspace {
 };
 
 struct Base {
+    AnimationManager* anim_manager;
     int screen;
     int gaps;
     bool gaps_enabled;
@@ -161,6 +168,7 @@ void set_scroll_visible(void *arg, Base &base);
 
 void increment_scroll_visible(void *arg, Base &base);
 void decrement_scroll_visible(void *arg, Base &base);
+void toggle_animations(void *arg, Base &base);
 }
 
 #endif //NWM_HPP
