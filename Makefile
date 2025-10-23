@@ -4,12 +4,12 @@ SRC      = src/nwm.cpp src/bar.cpp src/tiling.cpp src/systray.cpp
 OBJ      = src/nwm.o src/bar.o src/tiling.o src/systray.o
 DEPS     = src/nwm.hpp src/bar.hpp src/tiling.hpp src/config.hpp src/systray.hpp
 
-LDFLAGS  = -I/usr/include/freetype2 
+LDFLAGS  = -I/usr/include/freetype2
 LDLIBS   = -lX11 -lXft -lfreetype -lfontconfig -lXrender -lm -lXrandr
 
 PREFIX   ?= /usr/local
 BINDIR   ?= $(PREFIX)/bin
-XSESSIONSDIR ?= /usr/share/xsessions
+XSESSIONSDIR ?= $(PREFIX)/share/xsessions
 
 .PHONY: copy all install clean uninstall
 

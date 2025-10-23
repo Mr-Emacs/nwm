@@ -204,6 +204,75 @@ nix develop
 
 This provides a shell with all build tools, libraries, and useful utilities pre-installed.
 
+*** Installing on NixOS with Custom Configuration
+
+Since NWM follows the suckless philosophy (configuration through recompilation), the recommended approach is to maintain your customized NWM source in your dotfiles and use ~overrideAttrs~ to build from it.
+
+1. Copy the NWM source to your dotfiles:
+   #+begin_src bash
+   mkdir -p ~/nixos-dotfiles/config
+   git clone https://github.com/xsoder/nwm.git ~/nixos-dotfiles/config/nwm
+   #+end_src
+
+2. Edit your configuration:
+   #+begin_src bash
+   cd ~/nixos-dotfiles/config/nwm
+   # The Makefile will copy default-config.hpp to config.hpp on first build
+   make copy
+   # Now edit src/config.hpp with your customizations
+   vim src/config.hpp
+   #+end_src
+
+3. Add NWM as a flake input and use ~overrideAttrs~ in your NixOS configuration:
+
+   In your ~flake.nix~:
+   #+begin_src nix
+   {
+     inputs = {
+       nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+       nwm.url = "github:yourusername/nwm-flake";
+     };
+
+     outputs = { self, nixpkgs, nwm, ... }: {
+       nixosConfigurations.yourhostname = nixpkgs.lib.nixosSystem {
+         system = "x86_64-linux";
+         specialArgs = { inherit nwm; };
+         modules = [ ./configuration.nix ];
+       };
+     };
+   }
+   #+end_src
+
+   In your ~configuration.nix~:
+   #+begin_src nix
+   { pkgs, nwm, ... }:
+
+   {
+     environment.systemPackages = [
+       (nwm.packages.x86_64-linux.default.overrideAttrs {
+         src = ./config/nwm;
+       })
+     ];
+
+     # Optional: Enable as a display manager session
+     services.xserver = {
+       enable = true;
+       displayManager.sessionPackages = [
+         (nwm.packages.x86_64-linux.default.overrideAttrs {
+           src = ./config/nwm;
+         })
+       ];
+     };
+   }
+   #+end_src
+
+4. Rebuild your system:
+   #+begin_src bash
+   sudo nixos-rebuild switch --flake .#yourhostname
+   #+end_src
+
+Now whenever you modify ~config/nwm/src/config.hpp~, just rebuild your system and NWM will be recompiled with your changes.
+
 * Getting Started
 
 ** Starting NWM
