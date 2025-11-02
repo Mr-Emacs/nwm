@@ -61,7 +61,7 @@ using namespace nwm;
 #define USE_XINERAMA        1
 #define SCROLL_WINDOWS_VISIBLE 2
 
-#define FONT                "Ubuntu Mono:size=10"
+#define FONT                "Ubuntu Mono:size=12"
 
 static const std::vector<std::string> WIDGET = {
     "1","2","3","4","5","6","7","8","9"
