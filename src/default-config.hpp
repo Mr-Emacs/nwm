@@ -6,16 +6,6 @@
 
 using namespace nwm;
 
-#define BORDER_WIDTH        1
-#define BORDER_COLOR        0x181818
-#define FOCUS_COLOR         0x005577
-#define GAP_SIZE            0
-
-#define BAR_POSITION        1
-#define SCROLL_WINDOWS_VISIBLE 2
-
-#define FONT                "Ubuntu Mono:size=10:antialias=true:autohint=true"
-
 #define ANIMATIONS_ENABLED          true
 
 #define ANIM_SCROLL_ENABLED         true
@@ -33,15 +23,10 @@ using namespace nwm;
 #define ANIM_WINDOW_RESIZE_DURATION 200
 #define ANIM_OPACITY_DURATION       150
 #define ANIM_MASTER_FACTOR_DURATION 250
-#define ANIM_WINDOW_OPEN_DURATION   200
+#define ANIM_WINDOW_OPEN_DURATION   199
 #define ANIM_WINDOW_CLOSE_DURATION  200
 #define ANIM_WORKSPACE_SWITCH_DURATION 300
 #define ANIM_BORDER_COLOR_DURATION  150
-
-// Animation easing types
-// Available: LINEAR, EASE_IN_QUAD, EASE_OUT_QUAD, EASE_IN_OUT_QUAD,
-//            EASE_IN_CUBIC, EASE_OUT_CUBIC, EASE_IN_OUT_CUBIC,
-//            EASE_OUT_ELASTIC, EASE_OUT_BOUNCE
 #define ANIM_SCROLL_EASING          nwm::EasingType::EASE_OUT_CUBIC
 #define ANIM_WINDOW_MOVE_EASING     nwm::EasingType::EASE_OUT_QUAD
 #define ANIM_WINDOW_RESIZE_EASING   nwm::EasingType::EASE_OUT_QUAD
@@ -58,22 +43,40 @@ using namespace nwm;
 #define WINDOW_OPEN_STYLE           nwm::AnimationManager::SCALE
 #define WINDOW_CLOSE_STYLE          nwm::AnimationManager::SCALE_DOWN
 
+#define BORDER_WIDTH        3
+#define BORDER_COLOR        0x181818
+#define FOCUS_COLOR         0x005577
+#define GAP_SIZE            0
+
+#define BAR_POSITION        1
+#define USE_BUILTIN_BAR     1
+
+#define SHOW_WINDOW_TITLES  0
+#define TITLE_BAR_HEIGHT    18
+#define TITLE_BAR_BG        0x282828
+#define TITLE_BAR_FG        0xEBDBB2
+#define TITLE_BAR_FOCUS_BG  0x005577
+#define TITLE_BAR_FOCUS_FG  0xFFFFFF
+
+#define USE_XINERAMA        1
+#define SCROLL_WINDOWS_VISIBLE 2
+
+#define FONT                "Ubuntu Mono:size=12"
+
 static const std::vector<std::string> WIDGET = {
     "1","2","3","4","5","6","7","8","9"
 };
 
 #define RESIZE_STEP         60
 
-#define SCROLL_STEP         300
+#define SCROLL_STEP         550
 
 #define MODKEY Mod4Mask
 
-static const char *termcmd[]    = { "st",        NULL };
+static const char *termcmd[]    = { "kitty",        NULL };
 static const char *emacs[]      = { "emacs",     NULL };
 static const char *dmenucmd[]   = { "dmenu_run", NULL };
-static const char *browser[]    = { "chromium",   NULL };
-static const char *zoomer[]     = { "boomer",   NULL };
-static const char *master[]     = { "/home/xsoder/scripts/master",   NULL };
+static const char *browser[]    = { "firefox",   NULL };
 
 static const int ws0 = 0;
 static const int ws1 = 1;
@@ -105,11 +108,8 @@ static struct {
     { MODKEY,             XK_d,               spawn,          dmenucmd },
     { MODKEY,             XK_c,               spawn,          emacs },
     { MODKEY,             XK_b,               spawn,          browser },
-    { MODKEY,             XK_z,               spawn,          zoomer },
-    { MODKEY,             XK_m,               spawn,          master },
     { MODKEY,             XK_r,               toggle_bar,     NULL },
     { MODKEY,             XK_q,               close_window,   NULL },
-    { MODKEY|ShiftMask,   XK_a,               toggle_animations, NULL },
 
     { MODKEY,             XK_a,               toggle_gap,     NULL },
     { MODKEY,             XK_t,               toggle_layout,  NULL },

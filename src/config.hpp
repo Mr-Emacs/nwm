@@ -51,7 +51,7 @@ using namespace nwm;
 #define BAR_POSITION        1
 #define USE_BUILTIN_BAR     1
 
-#define SHOW_WINDOW_TITLES  1
+#define SHOW_WINDOW_TITLES  0
 #define TITLE_BAR_HEIGHT    18
 #define TITLE_BAR_BG        0x282828
 #define TITLE_BAR_FG        0xEBDBB2
@@ -79,6 +79,7 @@ static const char *dmenucmd[]   = { "dmenu_run", NULL };
 static const char *browser[]    = { "chromium",   NULL };
 static const char *zoomer[]     = { "boomer",   NULL };
 static const char *master[]     = { "/home/xsoder/scripts/master",   NULL };
+
 static const int ws0 = 0;
 static const int ws1 = 1;
 static const int ws2 = 2;
