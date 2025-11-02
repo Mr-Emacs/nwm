@@ -51,7 +51,7 @@ using namespace nwm;
 #define BAR_POSITION        1
 #define USE_BUILTIN_BAR     1
 
-#define SHOW_WINDOW_TITLES  1
+#define SHOW_WINDOW_TITLES  0
 #define TITLE_BAR_HEIGHT    18
 #define TITLE_BAR_BG        0x282828
 #define TITLE_BAR_FG        0xEBDBB2
@@ -73,12 +73,11 @@ static const std::vector<std::string> WIDGET = {
 
 #define MODKEY Mod4Mask
 
-static const char *termcmd[]    = { "st",        NULL };
+static const char *termcmd[]    = { "kitty",        NULL };
 static const char *emacs[]      = { "emacs",     NULL };
 static const char *dmenucmd[]   = { "dmenu_run", NULL };
-static const char *browser[]    = { "chromium",   NULL };
-static const char *zoomer[]     = { "boomer",   NULL };
-static const char *master[]     = { "/home/xsoder/scripts/master",   NULL };
+static const char *browser[]    = { "firefox",   NULL };
+
 static const int ws0 = 0;
 static const int ws1 = 1;
 static const int ws2 = 2;
@@ -109,8 +108,6 @@ static struct {
     { MODKEY,             XK_d,               spawn,          dmenucmd },
     { MODKEY,             XK_c,               spawn,          emacs },
     { MODKEY,             XK_b,               spawn,          browser },
-    { MODKEY,             XK_z,               spawn,          zoomer },
-    { MODKEY,             XK_m,               spawn,          master },
     { MODKEY,             XK_r,               toggle_bar,     NULL },
     { MODKEY,             XK_q,               close_window,   NULL },
 
