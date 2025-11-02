@@ -9,7 +9,7 @@ LDLIBS   = -lX11 -lXft -lfreetype -lfontconfig -lXrender -lm -lXrandr -lXinerama
 
 PREFIX   ?= /usr/local
 BINDIR   ?= $(PREFIX)/bin
-XSESSIONSDIR ?= /usr/share/xsessions
+XSESSIONSDIR ?= $(PREFIX)/share/xsessions
 
 .PHONY: copy all install clean uninstall
 
