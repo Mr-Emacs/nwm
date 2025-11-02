@@ -5,7 +5,7 @@ OBJ      = src/nwm.o src/bar.o src/tiling.o src/systray.o src/animations.o
 DEPS     = src/nwm.hpp src/bar.hpp src/tiling.hpp src/config.hpp src/systray.hpp src/animations.hpp
 
 LDFLAGS  = -I/usr/include/freetype2 
-LDLIBS   = -lX11 -lXft -lfreetype -lfontconfig -lXrender -lm -lXrandr
+LDLIBS   = -lX11 -lXft -lfreetype -lfontconfig -lXrender -lm -lXrandr -lXinerama
 
 PREFIX   ?= /usr/local
 BINDIR   ?= $(PREFIX)/bin

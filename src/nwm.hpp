@@ -5,6 +5,8 @@
 #include <X11/cursorfont.h>
 #include <X11/Xft/Xft.h>
 #include <X11/extensions/Xrandr.h>
+#include <X11/extensions/Xinerama.h>
+#include <string>
 #include <vector>
 #include "bar.hpp"
 #include "systray.hpp"
@@ -17,8 +19,15 @@ namespace nwm {
     struct AnimationManager;
 }
 
-
 namespace nwm {
+
+struct TitleBar {
+    Window window;
+    XftDraw* xft_draw;
+    int x, y;
+    int width, height;
+    bool needs_redraw;
+};
 
 struct ManagedWindow {
     Window window;
@@ -30,10 +39,14 @@ struct ManagedWindow {
     int workspace;
     int monitor;
 
-
     int pre_fs_x, pre_fs_y;
     int pre_fs_width, pre_fs_height;
     bool pre_fs_floating;
+    
+    // Title bar support
+    TitleBar titlebar;
+    std::string title;
+    bool has_titlebar;
 };
 
 struct Monitor {
@@ -78,6 +91,14 @@ struct Base {
 
     XftFont* xft_font;
     XftDraw* xft_draw;
+    
+    // Title bar support
+    bool show_window_titles;
+    int titlebar_height;
+    XftColor titlebar_bg;
+    XftColor titlebar_fg;
+    XftColor titlebar_focus_bg;
+    XftColor titlebar_focus_fg;
 
     StatusBar bar;
     SystemTray systray;
@@ -105,6 +126,8 @@ struct Base {
     std::vector<Monitor> monitors;
     int current_monitor;
     int xrandr_event_base;
+    bool use_xinerama;
+    bool use_builtin_bar;
 };
 
 void manage_window(Window window, Base &base);
@@ -147,6 +170,7 @@ void handle_enter_notify(XCrossingEvent *e, Base &base);
 void handle_destroy_notify(XDestroyWindowEvent *e, Base &base);
 void handle_expose(XExposeEvent *e, Base &base);
 void handle_client_message(XClientMessageEvent *e, Base &base);
+void handle_property_notify(XPropertyEvent *e, Base &base);
 
 void setup_ewmh(Base &base);
 void reload_config(void *arg, Base &base);
@@ -168,7 +192,13 @@ void set_scroll_visible(void *arg, Base &base);
 
 void increment_scroll_visible(void *arg, Base &base);
 void decrement_scroll_visible(void *arg, Base &base);
-void toggle_animations(void *arg, Base &base);
+
+// Title bar functions
+void titlebar_init(ManagedWindow* window, Base &base);
+void titlebar_cleanup(ManagedWindow* window, Base &base);
+void titlebar_draw(ManagedWindow* window, Base &base);
+void titlebar_update_title(ManagedWindow* window, Base &base);
+std::string get_window_title(Display* display, Window window);
 }
 
 #endif //NWM_HPP
