@@ -3,6 +3,26 @@
 #include "config.hpp"
 #include <algorithm>
 #include <X11/Xlib.h>
+#include "animations.hpp"
+
+static void update_titlebar_position(nwm::ManagedWindow* w, nwm::Base &base) {
+    if (!w->has_titlebar) return;
+
+    // Simple positioning - align with window borders (no gap offset needed)
+    w->titlebar.x = w->x - base.border_width;
+    w->titlebar.y = w->y - base.titlebar_height;
+    w->titlebar.width = w->width + (2 * base.border_width);
+
+    XMoveResizeWindow(base.display, w->titlebar.window,
+                     w->titlebar.x, w->titlebar.y,
+                     w->titlebar.width, w->titlebar.height);
+
+    // Always raise titlebar above window
+    XRaiseWindow(base.display, w->titlebar.window);
+    
+    // Redraw to ensure proper colors and content
+    nwm::titlebar_draw(w, base);
+}
 
 static void ensure_focused_floating_on_top(Display *display, nwm::Base &base) {
     if (base.focused_window &&
@@ -125,6 +145,14 @@ void nwm::tile_horizontal(Base &base) {
 
     ensure_focused_floating_on_top(base.display, base);
     raise_override_windows(base.display, base);
+    
+    // Raise all titlebars to keep them visible above windows
+    for (auto &w : current_ws.windows) {
+        if (w.has_titlebar) {
+            XRaiseWindow(base.display, w.titlebar.window);
+        }
+    }
+    
     XFlush(base.display);
 }
 
@@ -141,56 +169,74 @@ void nwm::tile_windows(Base &base) {
 
         if (tiled_windows.empty()) continue;
 
-        int bar_height = base.bar_visible ? base.bar.height : 0;
+        int bar_height = base.bar_visible && base.use_builtin_bar ? base.bar.height : 0;
         int usable_height = mon.height - bar_height;
         int y_start = mon.y + (base.bar_position == 0 ? bar_height : 0);
+
+        int titlebar_offset = base.show_window_titles ? base.titlebar_height : 0;
 
         std::vector<Window> tiled_stack;
 
         if (tiled_windows.size() == 1) {
             tiled_windows[0]->x = mon.x + base.gaps;
-            tiled_windows[0]->y = base.gaps + y_start;
+            tiled_windows[0]->y = base.gaps + y_start + titlebar_offset;
             tiled_windows[0]->width = mon.width - 2 * base.gaps - 2 * base.border_width;
-            tiled_windows[0]->height = usable_height - 2 * base.gaps - 2 * base.border_width;
+            tiled_windows[0]->height = usable_height - 2 * base.gaps - 2 * base.border_width - titlebar_offset;
 
             XMoveResizeWindow(base.display, tiled_windows[0]->window,
                              tiled_windows[0]->x, tiled_windows[0]->y,
                              tiled_windows[0]->width, tiled_windows[0]->height);
 
+            update_titlebar_position(tiled_windows[0], base);
             tiled_stack.push_back(tiled_windows[0]->window);
         } else {
             int master_width = (int)(mon.width * mon.master_factor) - base.gaps - base.gaps / 2 - 2 * base.border_width;
             int stack_x = mon.x + (int)(mon.width * mon.master_factor) + base.gaps / 2;
             int stack_width = mon.width - (int)(mon.width * mon.master_factor) - base.gaps - base.gaps / 2 - 2 * base.border_width;
-            int stack_height = (usable_height - base.gaps * tiled_windows.size()) / (tiled_windows.size() - 1) - 2 * base.border_width;
+
+            int total_titlebar_height = titlebar_offset * (tiled_windows.size() - 1);
+            int stack_height = (usable_height - base.gaps * tiled_windows.size() - total_titlebar_height) / (tiled_windows.size() - 1) - 2 * base.border_width;
 
             tiled_windows[0]->x = mon.x + base.gaps;
-            tiled_windows[0]->y = base.gaps + y_start;
+            tiled_windows[0]->y = base.gaps + y_start + titlebar_offset;
             tiled_windows[0]->width = master_width;
-            tiled_windows[0]->height = usable_height - 2 * base.gaps - 2 * base.border_width;
+            tiled_windows[0]->height = usable_height - 2 * base.gaps - 2 * base.border_width - titlebar_offset;
 
             for (size_t i = 1; i < tiled_windows.size(); ++i) {
                 tiled_windows[i]->x = stack_x;
-                tiled_windows[i]->y = base.gaps + y_start + (i - 1) * (stack_height + base.gaps + 2 * base.border_width);
+                tiled_windows[i]->y = base.gaps + y_start + titlebar_offset +
+                                      (i - 1) * (stack_height + base.gaps + 2 * base.border_width + titlebar_offset);
                 tiled_windows[i]->width = stack_width;
                 tiled_windows[i]->height = stack_height;
             }
 
             for (auto *w : tiled_windows) {
                 XMoveResizeWindow(base.display, w->window, w->x, w->y, w->width, w->height);
+                update_titlebar_position(w, base);
                 tiled_stack.push_back(w->window);
             }
         }
 
         if (!tiled_stack.empty()) {
-            atomic_restack(base.display, base, tiled_stack);
+            XRestackWindows(base.display, tiled_stack.data(), tiled_stack.size());
         }
     }
 
-    ensure_focused_floating_on_top(base.display, base);
-    raise_override_windows(base.display, base);
+    if (base.focused_window &&
+        (base.focused_window->is_floating || base.focused_window->is_fullscreen)) {
+        XRaiseWindow(base.display, base.focused_window->window);
+    }
+
+    // Raise all titlebars to keep them visible above windows
+    for (auto &w : current_ws.windows) {
+        if (w.has_titlebar) {
+            XRaiseWindow(base.display, w.titlebar.window);
+        }
+    }
+
     XFlush(base.display);
 }
+
 
 void nwm::resize_master(void *arg, Base &base) {
     auto &current_ws = get_current_workspace(base);
@@ -227,8 +273,15 @@ void nwm::scroll_left(void *arg, Base &base) {
         scroll_amount = mon->width / scroll_visible;
     }
 
-    current_ws.scroll_offset = std::max(0, current_ws.scroll_offset - scroll_amount);
-    tile_horizontal(base);
+    int target_offset = std::max(0, current_ws.scroll_offset - scroll_amount);
+
+    if (base.anim_manager && base.anim_manager->animations_enabled &&
+        base.anim_manager->scroll_enabled) {
+        animate_scroll(base, target_offset);
+    } else {
+        current_ws.scroll_offset = target_offset;
+        tile_horizontal(base);
+    }
 }
 
 void nwm::scroll_right(void *arg, Base &base) {
@@ -249,9 +302,14 @@ void nwm::scroll_right(void *arg, Base &base) {
     int total_width = current_ws.windows.size() * window_width;
     int max_scroll = std::max(0, total_width - mon->width);
 
-    current_ws.scroll_offset = std::min(max_scroll,
-                                        current_ws.scroll_offset + scroll_amount);
-    tile_horizontal(base);
+    int target_offset = std::min(max_scroll, current_ws.scroll_offset + scroll_amount);
+    if (base.anim_manager && base.anim_manager->animations_enabled &&
+        base.anim_manager->scroll_enabled) {
+        animate_scroll(base, target_offset);
+    } else {
+        current_ws.scroll_offset = target_offset;
+        tile_horizontal(base);
+    }
 }
 
 void nwm::toggle_layout(void *arg, Base &base) {

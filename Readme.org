@@ -1,7 +1,6 @@
-
 #+TITLE: NWM - A Scrollable Tiling Window Manager
 #+AUTHOR: xsoder
-#+EMAIL: 
+#+EMAIL:
 #+DATE: 2025
 #+OPTIONS: toc:t num:3 html-style:nil
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="style.css" />
@@ -382,7 +381,7 @@ Press ~Super + Return~ to open a terminal. By default, NWM tries to launch ~st~ 
    #+begin_src bash
    # Arch
    sudo pacman -S st
-   
+
    # Build from source
    git clone https://git.suckless.org/st
    cd st
@@ -943,7 +942,7 @@ void nwm::bar_update_system_info(Base &base) {
     auto now = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
         now - base.bar.sys_info.last_update).count();
-    
+
     if (elapsed < 2) return;  // Change this value
     // ...
 }
@@ -1611,14 +1610,14 @@ You can add entirely new functionality by writing C++ functions and binding them
    void nwm::toggle_opacity(void *arg, Base &base) {
        (void)arg;
        if (!base.focused_window) return;
-       
+
        // Toggle between opaque and semi-transparent
        static bool is_transparent = false;
        is_transparent = !is_transparent;
-       
+
        unsigned long opacity = is_transparent ? 0xDDFFFFFF : 0xFFFFFFFF;
        Atom opacity_atom = XInternAtom(base.display, "_NET_WM_WINDOW_OPACITY", False);
-       
+
        XChangeProperty(base.display, base.focused_window->window,
                       opacity_atom, XA_CARDINAL, 32,
                       PropModeReplace, (unsigned char*)&opacity, 1);
@@ -1641,7 +1640,7 @@ void nwm::cycle_layouts(void *arg, Base &base) {
     (void)arg;
     static int current_layout = 0;
     current_layout = (current_layout + 1) % 3;
-    
+
     switch(current_layout) {
         case 0:
             base.horizontal_mode = false;
@@ -1655,7 +1654,7 @@ void nwm::cycle_layouts(void *arg, Base &base) {
             // Implement a grid layout or monocle layout here
             break;
     }
-    
+
     bar_draw(base);
 }
 #+end_src
@@ -1671,15 +1670,15 @@ Monocle layout shows one window at a time, fullscreen (but with bar visible):
 #+begin_src cpp
 void nwm::tile_monocle(Base &base) {
     auto &current_ws = get_current_workspace(base);
-    
+
     if (current_ws.windows.empty()) return;
-    
+
     int screen_width = WIDTH(base.display, base.screen);
     int screen_height = HEIGHT(base.display, base.screen);
     int bar_height = base.bar_visible ? base.bar.height : 0;
     int usable_height = screen_height - bar_height;
     int y_start = (base.bar_position == 0) ? bar_height : 0;
-    
+
     // Hide all windows except focused
     for (auto &w : current_ws.windows) {
         if (w.window == base.focused_window->window) {
@@ -1693,7 +1692,7 @@ void nwm::tile_monocle(Base &base) {
             XUnmapWindow(base.display, w.window);
         }
     }
-    
+
     XFlush(base.display);
 }
 #+end_src
@@ -1707,43 +1706,43 @@ Grid layout arranges windows in a grid:
 #+begin_src cpp
 void nwm::tile_grid(Base &base) {
     auto &current_ws = get_current_workspace(base);
-    
+
     std::vector<ManagedWindow*> tiled_windows;
     for (auto &w : current_ws.windows) {
         if (!w.is_floating && !w.is_fullscreen) {
             tiled_windows.push_back(&w);
         }
     }
-    
+
     if (tiled_windows.empty()) return;
-    
+
     int screen_width = WIDTH(base.display, base.screen);
     int screen_height = HEIGHT(base.display, base.screen);
     int bar_height = base.bar_visible ? base.bar.height : 0;
     int usable_height = screen_height - bar_height;
     int y_start = (base.bar_position == 0) ? bar_height : 0;
-    
+
     // Calculate grid dimensions
     int cols = std::ceil(std::sqrt(tiled_windows.size()));
     int rows = std::ceil((float)tiled_windows.size() / cols);
-    
+
     int win_width = screen_width / cols - 2 * base.gaps;
     int win_height = usable_height / rows - 2 * base.gaps;
-    
+
     for (size_t i = 0; i < tiled_windows.size(); ++i) {
         int col = i % cols;
         int row = i / cols;
-        
+
         tiled_windows[i]->x = col * (win_width + 2 * base.gaps) + base.gaps;
         tiled_windows[i]->y = row * (win_height + 2 * base.gaps) + base.gaps + y_start;
         tiled_windows[i]->width = win_width;
         tiled_windows[i]->height = win_height;
-        
+
         XMoveResizeWindow(base.display, tiled_windows[i]->window,
                          tiled_windows[i]->x, tiled_windows[i]->y,
                          tiled_windows[i]->width, tiled_windows[i]->height);
     }
-    
+
     XFlush(base.display);
 }
 #+end_src
@@ -2219,7 +2218,7 @@ Found a bug? Please open an issue on GitHub with:
 
 - Temporary file to save the state: Save the location of each window.
 - Have the status bar as a separate program
-    
+
 Have an idea? Open an issue with the "enhancement" label.
 
 Please note: NWM aims to stay relatively simple and focused. Not all feature requests will be accepted. Features that significantly increase complexity or add many dependencies are less likely to be included.
