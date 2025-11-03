@@ -60,6 +60,7 @@
               xorg.libX11
               xorg.libXft
               xorg.libXrender
+              xorg.libXinerama
               fontconfig
               freetype
               nerd-fonts.iosevka

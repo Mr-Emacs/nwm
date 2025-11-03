@@ -9,7 +9,7 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "nwm";
-  version = "0.1.0";
+  version = "0.1.1";
 
   src = ./.;
 
@@ -22,6 +22,7 @@ stdenv.mkDerivation (finalAttrs: {
     xorg.libXft
     xorg.libXrender
     xorg.libXrandr
+    xorg.libXinerama
     freetype
     fontconfig
   ];
