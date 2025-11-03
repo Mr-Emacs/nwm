@@ -161,7 +161,6 @@ void nwm::MasterFactorAnimation::update(Base &base, float progress) {
 void nwm::WindowOpenAnimation::update(Base &base, float progress) {
     float eased = apply_easing(progress, easing);
 
-    // Find the window
     ManagedWindow *managed_win = nullptr;
     for (auto &ws : base.workspaces) {
         for (auto &w : ws.windows) {
@@ -208,7 +207,6 @@ void nwm::WindowOpenAnimation::update(Base &base, float progress) {
         case AnimationManager::SLIDE_FROM_BOTTOM:
         case AnimationManager::SLIDE_FROM_LEFT:
         case AnimationManager::SLIDE_FROM_RIGHT: {
-            // Slide animation handled in animate_window_open function
             break;
         }
     }
@@ -253,7 +251,6 @@ void nwm::WindowCloseAnimation::update(Base &base, float progress) {
         case AnimationManager::SLIDE_TO_BOTTOM:
         case AnimationManager::SLIDE_TO_LEFT:
         case AnimationManager::SLIDE_TO_RIGHT: {
-            // Slide animation (implement as needed)
             float current_opacity = start_opacity - (start_opacity - target_opacity) * eased;
             Atom opacity_atom = XInternAtom(base.display, "_NET_WM_WINDOW_OPACITY", False);
             unsigned long opacity_value = (unsigned long)(current_opacity * 0xFFFFFFFF);
@@ -269,14 +266,11 @@ void nwm::WindowCloseAnimation::update(Base &base, float progress) {
 void nwm::WorkspaceSwitchAnimation::update(Base &base, float progress) {
     (void)base;
     (void)progress;
-    // Workspace switch animation - can be implemented for sliding workspaces
-    // This is a placeholder for future implementation
 }
 
 void nwm::BorderColorAnimation::update(Base &base, float progress) {
     float eased = apply_easing(progress, easing);
 
-    // Interpolate RGB values
     unsigned long start_r = (start_color >> 16) & 0xFF;
     unsigned long start_g = (start_color >> 8) & 0xFF;
     unsigned long start_b = start_color & 0xFF;
@@ -298,10 +292,8 @@ void nwm::BorderColorAnimation::update(Base &base, float progress) {
 void nwm::animations_init(Base &base) {
     base.anim_manager = new AnimationManager();
 
-    // Load settings from config.hpp
     base.anim_manager->animations_enabled = ANIMATIONS_ENABLED;
 
-    // Individual toggles
     base.anim_manager->scroll_enabled = ANIM_SCROLL_ENABLED;
     base.anim_manager->window_move_enabled = ANIM_WINDOW_MOVE_ENABLED;
     base.anim_manager->window_resize_enabled = ANIM_WINDOW_RESIZE_ENABLED;
@@ -312,7 +304,6 @@ void nwm::animations_init(Base &base) {
     base.anim_manager->workspace_switch_enabled = ANIM_WORKSPACE_SWITCH_ENABLED;
     base.anim_manager->border_color_enabled = ANIM_BORDER_COLOR_ENABLED;
 
-    // Duration settings
     base.anim_manager->scroll_duration = ANIM_SCROLL_DURATION;
     base.anim_manager->window_move_duration = ANIM_WINDOW_MOVE_DURATION;
     base.anim_manager->window_resize_duration = ANIM_WINDOW_RESIZE_DURATION;
@@ -323,7 +314,6 @@ void nwm::animations_init(Base &base) {
     base.anim_manager->workspace_switch_duration = ANIM_WORKSPACE_SWITCH_DURATION;
     base.anim_manager->border_color_duration = ANIM_BORDER_COLOR_DURATION;
 
-    // Easing settings
     base.anim_manager->scroll_easing = ANIM_SCROLL_EASING;
     base.anim_manager->window_move_easing = ANIM_WINDOW_MOVE_EASING;
     base.anim_manager->window_resize_easing = ANIM_WINDOW_RESIZE_EASING;
@@ -334,7 +324,6 @@ void nwm::animations_init(Base &base) {
     base.anim_manager->workspace_switch_easing = ANIM_WORKSPACE_SWITCH_EASING;
     base.anim_manager->border_color_easing = ANIM_BORDER_COLOR_EASING;
 
-    // Animation styles
     base.anim_manager->window_open_style = WINDOW_OPEN_STYLE;
     base.anim_manager->window_close_style = WINDOW_CLOSE_STYLE;
 }
@@ -464,7 +453,6 @@ void nwm::animate_floating_transition(Base &base, Window window, bool to_floatin
         return;
     }
 
-    // Cancel existing animations for this window
     for (auto it = base.anim_manager->animations.begin();
          it != base.anim_manager->animations.end();) {
         if (((*it)->type == AnimationType::FLOATING_TRANSITION ||
@@ -481,7 +469,7 @@ void nwm::animate_floating_transition(Base &base, Window window, bool to_floatin
                 WindowResizeAnimation *anim = static_cast<WindowResizeAnimation*>(*it);
                 if (anim->window == window) should_remove = true;
             }
-            
+
             if (should_remove) {
                 delete *it;
                 it = base.anim_manager->animations.erase(it);
@@ -812,7 +800,6 @@ void nwm::animate_border_color(Base &base, Window window, unsigned long target_c
         return;
     }
 
-    // Cancel existing border color animations for this window
     for (auto it = base.anim_manager->animations.begin();
          it != base.anim_manager->animations.end();) {
         if ((*it)->type == AnimationType::BORDER_COLOR_CHANGE) {
@@ -836,7 +823,6 @@ void nwm::animate_border_color(Base &base, Window window, unsigned long target_c
     anim->monitor_index = base.current_monitor;
     anim->window = window;
 
-    // Get current border color (approximation - we use the configured colors)
     bool is_focused = false;
     for (auto &ws : base.workspaces) {
         for (auto &w : ws.windows) {
