@@ -35,7 +35,6 @@ void nwm::monitors_init(Base &base) {
     base.monitors.clear();
     base.current_monitor = 0;
 
-    // Try Xinerama first if enabled
     if (base.use_xinerama) {
         int num_screens = 0;
         XineramaScreenInfo *screen_info = XineramaQueryScreens(base.display, &num_screens);
@@ -66,10 +65,8 @@ void nwm::monitors_init(Base &base) {
         }
     }
 
-    // Fallback to XRandR
     int event_base, error_base;
     if (!XRRQueryExtension(base.display, &event_base, &error_base)) {
-        // No XRandR, create single monitor
         Monitor mon;
         mon.id = 0;
         mon.x = 0;
@@ -673,13 +670,11 @@ void nwm::switch_workspace(void *arg, Base &base) {
     if (target_ws < 0 || target_ws >= NUM_WORKSPACES) return;
     if (target_ws == (int)base.current_workspace) return;
 
-    // Trigger workspace switch animation if enabled
     if (base.anim_manager && base.anim_manager->animations_enabled &&
         base.anim_manager->workspace_switch_enabled) {
         animate_workspace_switch(base, base.current_workspace, target_ws);
     }
 
-    // Hide current workspace windows and titlebars
     for (auto &w : get_current_workspace(base).windows) {
         XUnmapWindow(base.display, w.window);
         if (w.has_titlebar) {
@@ -696,7 +691,6 @@ void nwm::switch_workspace(void *arg, Base &base) {
 
     base.focused_window = get_current_workspace(base).focused_window;
 
-    // Show new workspace windows and titlebars
     for (auto &w : get_current_workspace(base).windows) {
         XMapWindow(base.display, w.window);
         if (w.has_titlebar && !w.is_floating && !w.is_fullscreen) {
@@ -738,13 +732,11 @@ void nwm::move_to_workspace(void *arg, Base &base) {
             ManagedWindow w = *it;
             w.workspace = target_ws;
 
-            // Animate window close before moving if animations enabled
             if (base.anim_manager && base.anim_manager->animations_enabled &&
                 base.anim_manager->window_close_enabled) {
                 animate_window_close(base, w.window, [&base, w, target_ws, it]() mutable {
                     auto &curr_ws = base.workspaces[base.current_workspace];
 
-                    // Find and remove the window
                     for (auto iter = curr_ws.windows.begin(); iter != curr_ws.windows.end(); ++iter) {
                         if (iter->window == w.window) {
                             curr_ws.windows.erase(iter);
@@ -752,7 +744,6 @@ void nwm::move_to_workspace(void *arg, Base &base) {
                         }
                     }
 
-                    // Add to target workspace
                     base.workspaces[target_ws].windows.push_back(w);
 
                     Atom workspace_atom = XInternAtom(base.display, "_NWM_WORKSPACE", False);
@@ -781,7 +772,6 @@ void nwm::move_to_workspace(void *arg, Base &base) {
                 return;
             }
 
-            // No animation - immediate move
             current_ws.windows.erase(it);
             base.workspaces[target_ws].windows.push_back(w);
 
@@ -904,7 +894,6 @@ void nwm::toggle_float(void *arg, Base &base) {
     auto &current_ws = get_current_workspace(base);
     for (auto &w : current_ws.windows) {
         if (w.window == base.focused_window->window) {
-            // Store current position and size
             int start_x = w.x;
             int start_y = w.y;
             int start_width = w.width;
@@ -922,7 +911,6 @@ void nwm::toggle_float(void *arg, Base &base) {
                 int target_x = mon->x + (mon->width - target_width) / 2;
                 int target_y = mon->y + (mon->height - target_height) / 2;
 
-                // Animate to floating position if animations enabled
                 if (base.anim_manager && base.anim_manager->animations_enabled &&
                     (base.anim_manager->window_move_enabled || base.anim_manager->window_resize_enabled)) {
                     animate_floating_transition(base, w.window, true,
@@ -945,26 +933,22 @@ void nwm::toggle_float(void *arg, Base &base) {
                 XRaiseWindow(base.display, w.window);
                 XSetInputFocus(base.display, w.window, RevertToPointerRoot, CurrentTime);
 
-                // Hide titlebar when switching to floating mode
                 if (w.has_titlebar) {
                     XUnmapWindow(base.display, w.titlebar.window);
                     titlebar_cleanup(&w, base);
                 }
             } else {
-                // Calculate target tiled position before animating
                 if (base.horizontal_mode) {
                     tile_horizontal(base);
                 } else {
                     tile_windows(base);
                 }
 
-                // Get the new tiled position
                 int target_x = w.x;
                 int target_y = w.y;
                 int target_width = w.width;
                 int target_height = w.height;
 
-                // Animate from floating to tiled if animations enabled
                 if (base.anim_manager && base.anim_manager->animations_enabled &&
                     (base.anim_manager->window_move_enabled || base.anim_manager->window_resize_enabled)) {
                     animate_floating_transition(base, w.window, false,
@@ -975,7 +959,6 @@ void nwm::toggle_float(void *arg, Base &base) {
                 XSetWindowBorderWidth(base.display, w.window, base.border_width);
                 XSetWindowBorder(base.display, w.window, base.focus_color);
 
-                // Recreate titlebar when switching back to tiled mode
                 titlebar_init(&w, base);
             }
             break;
@@ -991,172 +974,6 @@ void nwm::toggle_float(void *arg, Base &base) {
     }
 }
 
-void nwm::manage_window(Window window, Base &base) {
-    XWindowAttributes attr;
-
-    if (XGetWindowAttributes(base.display, window, &attr) == 0) {
-        return;
-    }
-
-    if (window == base.hint_check_window) {
-        return;
-    }
-
-    if (should_ignore_window(base.display, window)) {
-        return;
-    }
-
-    int target_workspace = base.current_workspace;
-    bool saved_floating = false;
-    bool saved_fullscreen = false;
-
-    Atom workspace_atom = XInternAtom(base.display, "_NWM_WORKSPACE", False);
-    Atom floating_atom = XInternAtom(base.display, "_NWM_FLOATING", False);
-    Atom fullscreen_atom = XInternAtom(base.display, "_NWM_FULLSCREEN", False);
-    Atom actual_type;
-    int actual_format;
-    unsigned long nitems, bytes_after;
-    unsigned char *prop = nullptr;
-
-    if (XGetWindowProperty(base.display, window, workspace_atom, 0, 1,
-                          True,
-                          XA_CARDINAL, &actual_type, &actual_format,
-                          &nitems, &bytes_after, &prop) == Success && prop) {
-        long saved_workspace = *(long*)prop;
-        XFree(prop);
-
-        if (saved_workspace >= 0 && saved_workspace < NUM_WORKSPACES) {
-            target_workspace = saved_workspace;
-        }
-    }
-
-    prop = nullptr;
-    if (XGetWindowProperty(base.display, window, floating_atom, 0, 1,
-                          True,
-                          XA_CARDINAL, &actual_type, &actual_format,
-                          &nitems, &bytes_after, &prop) == Success && prop) {
-        long is_floating = *(long*)prop;
-        saved_floating = (is_floating == 1);
-        XFree(prop);
-    }
-
-    prop = nullptr;
-    if (XGetWindowProperty(base.display, window, fullscreen_atom, 0, 1,
-                          True,
-                          XA_CARDINAL, &actual_type, &actual_format,
-                          &nitems, &bytes_after, &prop) == Success && prop) {
-        long is_fullscreen = *(long*)prop;
-        saved_fullscreen = (is_fullscreen == 1);
-        XFree(prop);
-    }
-
-    auto &target_ws = base.workspaces[target_workspace];
-
-    for (const auto &w : target_ws.windows) {
-        if (w.window == window) {
-            return;
-        }
-    }
-
-    bool is_float = saved_floating || should_float(base.display, window);
-
-    ManagedWindow w;
-    w.window = window;
-    w.is_floating = is_float;
-    w.is_focused = false;
-    w.is_fullscreen = saved_fullscreen;
-    w.workspace = target_workspace;
-    w.pre_fs_x = 0;
-    w.pre_fs_y = 0;
-    w.pre_fs_width = 0;
-    w.pre_fs_height = 0;
-    w.pre_fs_floating = false;
-
-    Monitor *mon = get_current_monitor(base);
-    if (!mon && !base.monitors.empty()) mon = &base.monitors[0];
-    w.monitor = mon ? mon->id : 0;
-
-    if (is_float) {
-        XSizeHints hints;
-        long supplied;
-        if (XGetWMNormalHints(base.display, window, &hints, &supplied)) {
-            if (hints.flags & (PSize | USSize)) {
-                w.width = hints.width;
-                w.height = hints.height;
-            } else {
-                w.width = attr.width > 0 ? attr.width : 400;
-                w.height = attr.height > 0 ? attr.height : 300;
-            }
-
-            if (hints.flags & (PPosition | USPosition)) {
-                w.x = hints.x;
-                w.y = hints.y;
-            } else {
-                if (mon) {
-                    w.x = mon->x + (mon->width - w.width) / 2;
-                    w.y = mon->y + (mon->height - w.height) / 2;
-                } else {
-                    w.x = (WIDTH(base.display, base.screen) - w.width) / 2;
-                    w.y = (HEIGHT(base.display, base.screen) - w.height) / 2;
-                }
-            }
-        } else {
-            w.width = attr.width > 0 ? attr.width : 400;
-            w.height = attr.height > 0 ? attr.height : 300;
-            if (mon) {
-                w.x = mon->x + (mon->width - w.width) / 2;
-                w.y = mon->y + (mon->height - w.height) / 2;
-            } else {
-                w.x = (WIDTH(base.display, base.screen) - w.width) / 2;
-                w.y = (HEIGHT(base.display, base.screen) - w.height) / 2;
-            }
-        }
-
-        if (w.x != attr.x || w.y != attr.y || w.width != attr.width || w.height != attr.height) {
-            XMoveResizeWindow(base.display, window, w.x, w.y, w.width, w.height);
-        }
-    } else {
-        w.x = base.gaps;
-        w.y = base.gaps + base.bar.height;
-        w.width = WIDTH(base.display, base.screen) / 2;
-        w.height = HEIGHT(base.display, base.screen) / 2;
-    }
-
-    target_ws.windows.push_back(w);
-
-    // Initialize titlebar for the newly created window
-    ManagedWindow* new_window = &target_ws.windows.back();
-    titlebar_init(new_window, base);
-
-    XSetWindowAttributes attrs;
-    attrs.event_mask = EnterWindowMask | LeaveWindowMask | PropertyChangeMask |
-                       StructureNotifyMask | FocusChangeMask;
-    XChangeWindowAttributes(base.display, window, CWEventMask, &attrs);
-
-    XSetWindowBorder(base.display, window, base.border_color);
-    XSetWindowBorderWidth(base.display, window, is_float ? 1 : base.border_width);
-
-    if (saved_fullscreen && mon) {
-        XSetWindowBorderWidth(base.display, window, 0);
-        XMoveResizeWindow(base.display, window, mon->x, mon->y, mon->width, mon->height);
-
-        Atom wm_state = XInternAtom(base.display, "_NET_WM_STATE", False);
-        Atom fullscreen = XInternAtom(base.display, "_NET_WM_STATE_FULLSCREEN", False);
-        XChangeProperty(base.display, window, wm_state, XA_ATOM, 32,
-                      PropModeReplace, (unsigned char*)&fullscreen, 1);
-    }
-
-    if (target_workspace == (int)base.current_workspace) {
-        XMapWindow(base.display, window);
-        if (is_float || saved_fullscreen) {
-            XRaiseWindow(base.display, window);
-        }
-    } else {
-        XUnmapWindow(base.display, window);
-    }
-
-    XFlush(base.display);
-}
 
 void nwm::unmanage_window(Window window, Base &base) {
     auto &current_ws = get_current_workspace(base);
@@ -1209,7 +1026,6 @@ void nwm::unmanage_window(Window window, Base &base) {
 void nwm::focus_window(ManagedWindow *window, Base &base) {
     auto &current_ws = get_current_workspace(base);
 
-    // Unfocus all windows with animated border color and update titlebars
     for (auto &w : current_ws.windows) {
         if (!w.is_floating && !w.is_fullscreen) {
             if (base.anim_manager && base.anim_manager->animations_enabled &&
@@ -1221,7 +1037,6 @@ void nwm::focus_window(ManagedWindow *window, Base &base) {
         }
         w.is_focused = false;
 
-        // Update titlebar color for unfocused state
         if (w.has_titlebar) {
             titlebar_draw(&w, base);
         }
@@ -1235,7 +1050,6 @@ void nwm::focus_window(ManagedWindow *window, Base &base) {
         base.focused_window = window;
         window->is_focused = true;
 
-        // Focus the new window with animated border color
         if (!window->is_floating && !window->is_fullscreen) {
             if (base.anim_manager && base.anim_manager->animations_enabled &&
                 base.anim_manager->border_color_enabled) {
@@ -1249,7 +1063,6 @@ void nwm::focus_window(ManagedWindow *window, Base &base) {
             XRaiseWindow(base.display, window->window);
         }
 
-        // Update titlebar color for focused state
         if (window->has_titlebar) {
             titlebar_draw(window, base);
         }
@@ -1366,7 +1179,6 @@ void nwm::move_window(ManagedWindow *window, int x, int y, Base &base) {
         window->y = y;
         XMoveWindow(base.display, window->window, x, y);
 
-        // Update titlebar position (no gap offset needed)
         if (window->has_titlebar) {
             window->titlebar.x = x - base.border_width;
             window->titlebar.y = y - base.titlebar_height;
@@ -1383,7 +1195,6 @@ void nwm::resize_window(ManagedWindow *window, int width, int height, Base &base
         window->height = height;
         XResizeWindow(base.display, window->window, width, height);
 
-        // Update titlebar width (no gap offset needed)
         if (window->has_titlebar) {
             window->titlebar.width = width + (2 * base.border_width);
             XResizeWindow(base.display, window->titlebar.window,
@@ -1400,11 +1211,9 @@ void nwm::close_window(void *arg, Base &base) {
 
     Window window = base.focused_window->window;
 
-    // Use animated close if enabled, otherwise close immediately
     if (base.anim_manager && base.anim_manager->animations_enabled &&
         base.anim_manager->window_close_enabled) {
 
-        // Animate the close, then send close message in callback
         animate_window_close(base, window, [&base, window]() {
             XEvent ev;
             ev.type = ClientMessage;
@@ -1416,7 +1225,6 @@ void nwm::close_window(void *arg, Base &base) {
             XSendEvent(base.display, window, False, NoEventMask, &ev);
         });
     } else {
-        // Close immediately without animation
         XEvent ev;
         ev.type = ClientMessage;
         ev.xclient.window = window;
@@ -1449,7 +1257,6 @@ void nwm::handle_map_request(XMapRequestEvent *e, Base &base) {
     if (!current_ws.windows.empty()) {
         ManagedWindow *new_window = &current_ws.windows.back();
 
-        // Trigger window open animation
         if (base.anim_manager && base.anim_manager->animations_enabled &&
             base.anim_manager->window_open_enabled) {
             animate_window_open(base, new_window->window);
@@ -1880,7 +1687,6 @@ void nwm::handle_motion_notify(XMotionEvent *e, Base &base) {
                 XMoveWindow(base.display, w.window, new_x, new_y);
                 XRaiseWindow(base.display, w.window);
 
-                // Update titlebar position during drag (no gap offset needed)
                 if (w.has_titlebar) {
                     w.titlebar.x = new_x - base.border_width;
                     w.titlebar.y = new_y - base.titlebar_height;
@@ -1908,7 +1714,6 @@ void nwm::handle_motion_notify(XMotionEvent *e, Base &base) {
                 XResizeWindow(base.display, w.window, new_width, new_height);
                 XRaiseWindow(base.display, w.window);
 
-                // Update titlebar width during resize (no gap offset needed)
                 if (w.has_titlebar) {
                     w.titlebar.width = new_width + (2 * base.border_width);
                     XResizeWindow(base.display, w.titlebar.window,
@@ -1987,7 +1792,6 @@ void nwm::handle_expose(XExposeEvent *e, Base &base) {
 std::string nwm::get_window_title(Display* display, Window window) {
     std::string title = "Untitled";
 
-    // Try _NET_WM_NAME first (UTF-8)
     Atom net_wm_name = XInternAtom(display, "_NET_WM_NAME", False);
     Atom utf8_string = XInternAtom(display, "UTF8_STRING", False);
     Atom actual_type;
@@ -2003,7 +1807,6 @@ std::string nwm::get_window_title(Display* display, Window window) {
         return title;
     }
 
-    // Fallback to WM_NAME
     XTextProperty text_prop;
     if (XGetWMName(display, window, &text_prop)) {
         if (text_prop.value) {
@@ -2015,23 +1818,18 @@ std::string nwm::get_window_title(Display* display, Window window) {
     return title;
 }
 
-// Replace the titlebar functions in nwm.cpp with these implementations
-
 void nwm::titlebar_init(ManagedWindow* window, Base &base) {
-    // Initialize to safe defaults
     window->has_titlebar = false;
     window->titlebar.xft_draw = nullptr;
     window->titlebar.window = 0;
     window->titlebar.needs_redraw = false;
 
-    // Only create titlebars for tiled windows
     if (!base.show_window_titles || window->is_floating || window->is_fullscreen) {
         return;
     }
 
     window->title = get_window_title(base.display, window->window);
 
-    // Create XftDraw directly on the managed window
     window->titlebar.xft_draw = XftDrawCreate(
         base.display, window->window,
         DefaultVisual(base.display, base.screen),
@@ -2042,22 +1840,20 @@ void nwm::titlebar_init(ManagedWindow* window, Base &base) {
         return;
     }
 
-    // Store titlebar dimensions (no separate window needed)
     window->titlebar.x = 0;
     window->titlebar.y = 0;
     window->titlebar.width = window->width;
     window->titlebar.height = base.titlebar_height;
     window->titlebar.needs_redraw = true;
-    window->titlebar.window = window->window; // Reference to parent window
+    window->titlebar.window = window->window;
 
-    // Set has_titlebar after successful creation
     window->has_titlebar = true;
 
-    // Draw immediately
     titlebar_draw(window, base);
 }
 
 void nwm::titlebar_cleanup(ManagedWindow* window, Base &base) {
+    (void)base;
     if (!window->has_titlebar) return;
 
     if (window->titlebar.xft_draw) {
@@ -2065,7 +1861,6 @@ void nwm::titlebar_cleanup(ManagedWindow* window, Base &base) {
         window->titlebar.xft_draw = nullptr;
     }
 
-    // No separate window to destroy
     window->titlebar.window = 0;
     window->has_titlebar = false;
 }
@@ -2075,29 +1870,24 @@ void nwm::titlebar_draw(ManagedWindow* window, Base &base) {
         return;
     }
 
-    // Create GC for drawing
     GC gc = XCreateGC(base.display, window->window, 0, nullptr);
     if (!gc) {
         return;
     }
 
-    // Choose colors based on focus
     unsigned long bg_color = window->is_focused ? TITLE_BAR_FOCUS_BG : TITLE_BAR_BG;
     XftColor* text_color = window->is_focused ? &base.titlebar_focus_fg : &base.titlebar_fg;
 
-    // Draw background directly on the window at the top
     XSetForeground(base.display, gc, bg_color);
     XSetFunction(base.display, gc, GXcopy);
 
     XFillRectangle(base.display, window->window, gc,
                    0, 0, window->width, base.titlebar_height);
 
-    // Draw title text
     if (!window->title.empty() && base.xft_font) {
         int text_x = 5;
         int text_y = base.titlebar_height / 2 + 5;
 
-        // Truncate title if too long
         std::string display_title = window->title;
         XGlyphInfo extents;
         XftTextExtentsUtf8(base.display, base.xft_font,
@@ -2323,6 +2113,37 @@ void nwm::cleanup(Base &base) {
                 XUnmapWindow(base.display, w.window);
             }
         }
+    } else {
+        for (auto &ws : base.workspaces) {
+            for (auto &w : ws.windows) {
+                Atom workspace_atom = XInternAtom(base.display, "_NWM_WORKSPACE", False);
+                long workspace_id = w.workspace;
+                XChangeProperty(base.display, w.window, workspace_atom,
+                              XA_CARDINAL, 32, PropModeReplace,
+                              (unsigned char*)&workspace_id, 1);
+
+                Atom floating_atom = XInternAtom(base.display, "_NWM_FLOATING", False);
+                long is_floating = w.is_floating ? 1 : 0;
+                XChangeProperty(base.display, w.window, floating_atom,
+                              XA_CARDINAL, 32, PropModeReplace,
+                              (unsigned char*)&is_floating, 1);
+
+                Atom fullscreen_atom = XInternAtom(base.display, "_NWM_FULLSCREEN", False);
+                long is_fullscreen = w.is_fullscreen ? 1 : 0;
+                XChangeProperty(base.display, w.window, fullscreen_atom,
+                              XA_CARDINAL, 32, PropModeReplace,
+                              (unsigned char*)&is_fullscreen, 1);
+
+                Atom monitor_atom = XInternAtom(base.display, "_NWM_MONITOR", False);
+                long monitor_id = w.monitor;
+                XChangeProperty(base.display, w.window, monitor_atom,
+                              XA_CARDINAL, 32, PropModeReplace,
+                              (unsigned char*)&monitor_id, 1);
+
+                XMapWindow(base.display, w.window);
+            }
+        }
+        XSync(base.display, False);
     }
 
     for (auto &ws : base.workspaces) {
@@ -2374,6 +2195,189 @@ void nwm::cleanup(Base &base) {
         XCloseDisplay(base.display);
         base.display = nullptr;
     }
+}
+
+void nwm::manage_window(Window window, Base &base) {
+    XWindowAttributes attr;
+
+    if (XGetWindowAttributes(base.display, window, &attr) == 0) {
+        return;
+    }
+
+    if (window == base.hint_check_window) {
+        return;
+    }
+
+    if (should_ignore_window(base.display, window)) {
+        return;
+    }
+
+    int target_workspace = base.current_workspace;
+    int target_monitor = base.current_monitor;
+    bool saved_floating = false;
+    bool saved_fullscreen = false;
+
+    Atom workspace_atom = XInternAtom(base.display, "_NWM_WORKSPACE", False);
+    Atom floating_atom = XInternAtom(base.display, "_NWM_FLOATING", False);
+    Atom fullscreen_atom = XInternAtom(base.display, "_NWM_FULLSCREEN", False);
+    Atom monitor_atom = XInternAtom(base.display, "_NWM_MONITOR", False);
+    Atom actual_type;
+    int actual_format;
+    unsigned long nitems, bytes_after;
+    unsigned char *prop = nullptr;
+
+    if (XGetWindowProperty(base.display, window, workspace_atom, 0, 1,
+                          True, XA_CARDINAL, &actual_type, &actual_format,
+                          &nitems, &bytes_after, &prop) == Success && prop) {
+        long saved_workspace = *(long*)prop;
+        XFree(prop);
+        if (saved_workspace >= 0 && saved_workspace < NUM_WORKSPACES) {
+            target_workspace = saved_workspace;
+        }
+    }
+
+    prop = nullptr;
+    if (XGetWindowProperty(base.display, window, floating_atom, 0, 1,
+                          True, XA_CARDINAL, &actual_type, &actual_format,
+                          &nitems, &bytes_after, &prop) == Success && prop) {
+        long is_floating = *(long*)prop;
+        saved_floating = (is_floating == 1);
+        XFree(prop);
+    }
+
+    prop = nullptr;
+    if (XGetWindowProperty(base.display, window, fullscreen_atom, 0, 1,
+                          True, XA_CARDINAL, &actual_type, &actual_format,
+                          &nitems, &bytes_after, &prop) == Success && prop) {
+        long is_fullscreen = *(long*)prop;
+        saved_fullscreen = (is_fullscreen == 1);
+        XFree(prop);
+    }
+
+    prop = nullptr;
+    if (XGetWindowProperty(base.display, window, monitor_atom, 0, 1,
+                          True, XA_CARDINAL, &actual_type, &actual_format,
+                          &nitems, &bytes_after, &prop) == Success && prop) {
+        long saved_monitor = *(long*)prop;
+        XFree(prop);
+        if (saved_monitor >= 0 && saved_monitor < (int)base.monitors.size()) {
+            target_monitor = saved_monitor;
+        }
+    }
+
+    auto &target_ws = base.workspaces[target_workspace];
+
+    for (const auto &w : target_ws.windows) {
+        if (w.window == window) {
+            return;
+        }
+    }
+
+    bool is_float = saved_floating || should_float(base.display, window);
+
+    ManagedWindow w;
+    w.window = window;
+    w.is_floating = is_float;
+    w.is_focused = false;
+    w.is_fullscreen = saved_fullscreen;
+    w.workspace = target_workspace;
+    w.pre_fs_x = 0;
+    w.pre_fs_y = 0;
+    w.pre_fs_width = 0;
+    w.pre_fs_height = 0;
+    w.pre_fs_floating = false;
+
+    w.monitor = target_monitor;
+
+    if (is_float) {
+        XSizeHints hints;
+        long supplied;
+        Monitor *mon = (target_monitor >= 0 && target_monitor < (int)base.monitors.size())
+                       ? &base.monitors[target_monitor]
+                       : get_current_monitor(base);
+        if (!mon && !base.monitors.empty()) mon = &base.monitors[0];
+
+        if (XGetWMNormalHints(base.display, window, &hints, &supplied)) {
+            if (hints.flags & (PSize | USSize)) {
+                w.width = hints.width;
+                w.height = hints.height;
+            } else {
+                w.width = attr.width > 0 ? attr.width : 400;
+                w.height = attr.height > 0 ? attr.height : 300;
+            }
+
+            if (hints.flags & (PPosition | USPosition)) {
+                w.x = hints.x;
+                w.y = hints.y;
+            } else {
+                if (mon) {
+                    w.x = mon->x + (mon->width - w.width) / 2;
+                    w.y = mon->y + (mon->height - w.height) / 2;
+                } else {
+                    w.x = (WIDTH(base.display, base.screen) - w.width) / 2;
+                    w.y = (HEIGHT(base.display, base.screen) - w.height) / 2;
+                }
+            }
+        } else {
+            w.width = attr.width > 0 ? attr.width : 400;
+            w.height = attr.height > 0 ? attr.height : 300;
+            if (mon) {
+                w.x = mon->x + (mon->width - w.width) / 2;
+                w.y = mon->y + (mon->height - w.height) / 2;
+            } else {
+                w.x = (WIDTH(base.display, base.screen) - w.width) / 2;
+                w.y = (HEIGHT(base.display, base.screen) - w.height) / 2;
+            }
+        }
+
+        if (w.x != attr.x || w.y != attr.y || w.width != attr.width || w.height != attr.height) {
+            XMoveResizeWindow(base.display, window, w.x, w.y, w.width, w.height);
+        }
+    } else {
+        w.x = base.gaps;
+        w.y = base.gaps + base.bar.height;
+        w.width = WIDTH(base.display, base.screen) / 2;
+        w.height = HEIGHT(base.display, base.screen) / 2;
+    }
+
+    target_ws.windows.push_back(w);
+
+    ManagedWindow* new_window = &target_ws.windows.back();
+    titlebar_init(new_window, base);
+
+    XSetWindowAttributes attrs;
+    attrs.event_mask = EnterWindowMask | LeaveWindowMask | PropertyChangeMask |
+                       StructureNotifyMask | FocusChangeMask;
+    XChangeWindowAttributes(base.display, window, CWEventMask, &attrs);
+
+    XSetWindowBorder(base.display, window, base.border_color);
+    XSetWindowBorderWidth(base.display, window, is_float ? 1 : base.border_width);
+
+    if (saved_fullscreen) {
+        Monitor *mon = (target_monitor >= 0 && target_monitor < (int)base.monitors.size())
+                       ? &base.monitors[target_monitor]
+                       : get_current_monitor(base);
+        if (mon) {
+            XSetWindowBorderWidth(base.display, window, 0);
+            XMoveResizeWindow(base.display, window, mon->x, mon->y, mon->width, mon->height);
+
+            Atom wm_state = XInternAtom(base.display, "_NET_WM_STATE", False);
+            Atom fullscreen = XInternAtom(base.display, "_NET_WM_STATE_FULLSCREEN", False);
+            XChangeProperty(base.display, window, wm_state, XA_ATOM, 32,
+                          PropModeReplace, (unsigned char*)&fullscreen, 1);
+        }
+    }
+
+    if (target_workspace == (int)base.current_workspace) {
+        XMapWindow(base.display, window);
+        if (is_float || saved_fullscreen) {
+            XRaiseWindow(base.display, window);
+        }
+    } else {
+        XUnmapWindow(base.display, window);
+    }
+
+    XFlush(base.display);
 }
 
 void nwm::run(Base &base) {
