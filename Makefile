@@ -4,8 +4,8 @@ SRC      = src/nwm.cpp src/bar.cpp src/tiling.cpp src/systray.cpp src/animations
 OBJ      = src/nwm.o src/bar.o src/tiling.o src/systray.o src/animations.o
 DEPS     = src/nwm.hpp src/bar.hpp src/tiling.hpp src/config.hpp src/systray.hpp src/animations.hpp
 
-LDFLAGS  = -I/usr/include/freetype2 
-LDLIBS   = -lX11 -lXft -lfreetype -lfontconfig -lXrender -lm -lXrandr -lXinerama
+LDFLAGS  = $(shell pkg-config --cflags freetype2 fontconfig xft x11 xrandr xinerama)
+LDLIBS   = $(shell pkg-config --libs freetype2 fontconfig xft x11 xrandr xinerama) -lXrender -lm
 
 PREFIX   ?= /usr/local
 BINDIR   ?= $(PREFIX)/bin
