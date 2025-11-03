@@ -12,6 +12,6 @@ Crate.io creation
 
 - [ ] Bar should be a separate program.
 - [x] Have The amount of Window in Scroll configurable. this should be done through the config
-- [ ] Auto release is buggy and not consistent.
-- [ ] The window flickering is still an issue.
-- [ ] Restarting the WM not displays the other windows hides everything.( After the multimonitor support this is still and issue)
+- [x] Auto release is buggy and not consistent.
+- [x] The window flickering is still an issue.(Compositor should be a thing)
+- [x] Restarting the WM not displays the other windows hides everything.( After the multimonitor support this is still and issue)
