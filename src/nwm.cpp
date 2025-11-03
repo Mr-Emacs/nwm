@@ -2060,6 +2060,38 @@ void nwm::init(Base &base) {
     monitors_init(base);
     animations_init(base);
 
+    Atom current_ws_atom = XInternAtom(base.display, "_NWM_CURRENT_WORKSPACE", False);
+    Atom current_mon_atom = XInternAtom(base.display, "_NWM_CURRENT_MONITOR", False);
+    Atom actual_type;
+    int actual_format;
+    unsigned long nitems, bytes_after;
+    unsigned char *prop = nullptr;
+
+    if (XGetWindowProperty(base.display, base.root, current_ws_atom, 0, 1,
+                          True, XA_CARDINAL, &actual_type, &actual_format,
+                          &nitems, &bytes_after, &prop) == Success && prop) {
+        long saved_workspace = *(long*)prop;
+        XFree(prop);
+        if (saved_workspace >= 0 && saved_workspace < NUM_WORKSPACES) {
+            base.current_workspace = saved_workspace;
+
+            if (base.current_monitor >= 0 && base.current_monitor < (int)base.monitors.size()) {
+                base.monitors[base.current_monitor].current_workspace = saved_workspace;
+            }
+        }
+    }
+
+    prop = nullptr;
+    if (XGetWindowProperty(base.display, base.root, current_mon_atom, 0, 1,
+                          True, XA_CARDINAL, &actual_type, &actual_format,
+                          &nitems, &bytes_after, &prop) == Success && prop) {
+        long saved_monitor = *(long*)prop;
+        XFree(prop);
+        if (saved_monitor >= 0 && saved_monitor < (int)base.monitors.size()) {
+            base.current_monitor = saved_monitor;
+        }
+    }
+
     if (base.use_builtin_bar) {
         bar_init(base);
     }
@@ -2091,6 +2123,22 @@ void nwm::init(Base &base) {
     setup_ewmh(base);
     nwm::tile_windows(base);
     nwm::setup_keys(base);
+    prop = nullptr;
+    Atom focused_win_atom = XInternAtom(base.display, "_NWM_FOCUSED_WINDOW", False);
+    if (XGetWindowProperty(base.display, base.root, focused_win_atom, 0, 1,
+        True, XA_WINDOW, &actual_type, &actual_format,
+        &nitems, &bytes_after, &prop) == Success && prop) {
+            Window saved_focused = *(Window*)prop;
+            XFree(prop);
+
+        auto &current_ws = get_current_workspace(base);
+        for (auto &w : current_ws.windows) {
+            if (w.window == saved_focused) {
+                focus_window(&w, base);
+                break;
+            }
+        }
+    }
     bar_draw(base);
 }
 
@@ -2105,6 +2153,29 @@ void nwm::cleanup(Base &base) {
         base.dragging = false;
         base.resizing = false;
         base.drag_window = None;
+    }
+
+    if (base.restart) {
+        Atom current_ws_atom = XInternAtom(base.display, "_NWM_CURRENT_WORKSPACE", False);
+        long current_ws = base.current_workspace;
+        XChangeProperty(base.display, base.root, current_ws_atom,
+        XA_CARDINAL, 32, PropModeReplace,
+        (unsigned char*)&current_ws, 1);
+
+        Atom current_mon_atom = XInternAtom(base.display, "_NWM_CURRENT_MONITOR", False);
+        long current_mon = base.current_monitor;
+        XChangeProperty(base.display, base.root, current_mon_atom,
+        XA_CARDINAL, 32, PropModeReplace,
+        (unsigned char*)&current_mon, 1);
+
+        if (base.focused_window) {
+            Atom focused_win_atom = XInternAtom(base.display, "_NWM_FOCUSED_WINDOW", False);
+            XChangeProperty(base.display, base.root, focused_win_atom,
+            XA_WINDOW, 32, PropModeReplace,
+            (unsigned char*)&base.focused_window->window, 1);
+        }
+
+        XSync(base.display, False);
     }
 
     if (!base.restart) {
