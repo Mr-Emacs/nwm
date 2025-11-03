@@ -41,7 +41,7 @@ struct StatusBar {
     XftColor xft_warning;
     XftColor xft_critical;
     XftColor xft_hover;
-    
+
     std::vector<BarSegment> segments;
     int hover_segment;
     SystemInfo sys_info;

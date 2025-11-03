@@ -108,7 +108,6 @@ void nwm::tile_horizontal(Base &base) {
                              tiled_windows[i]->x, tiled_windows[i]->y,
                              tiled_windows[i]->width, tiled_windows[i]->height);
 
-            // Redraw titlebar after resize
             if (tiled_windows[i]->has_titlebar) {
                 tiled_windows[i]->titlebar.width = win_width;
                 nwm::titlebar_draw(tiled_windows[i], base);
