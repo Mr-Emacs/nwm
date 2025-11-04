@@ -10,8 +10,10 @@ Crate.io creation
 
 ##  Fint Bugs Fixing
 
-- [ ] Bar should be a separate program.
+- [x] Bar should be a separate program(NOPE).
 - [x] Have The amount of Window in Scroll configurable. this should be done through the config
 - [x] Auto release is buggy and not consistent.
 - [x] The window flickering is still an issue.(Compositor should be a thing)
 - [x] Restarting the WM not displays the other windows hides everything.( After the multimonitor support this is still and issue)
+
+- [x] Bar input have been removed cuz of my trackpad which I will add later. Write a better mechansim when I could have a bool to disable and enable it.

@@ -8,7 +8,7 @@
 #include <cstring>
 
 #define TRAY_ICON_SIZE 20
-#define TRAY_PADDING 4
+#define TRAY_PADDING 6
 
 void nwm::systray_send_message(Display *display, Window window, long message,
                                long data1, long data2, long data3) {
@@ -43,32 +43,18 @@ void nwm::systray_init(Base &base) {
         return;
     }
 
-    XSetWindowAttributes attrs;
-    attrs.override_redirect = True;
-    attrs.event_mask = SubstructureNotifyMask | SubstructureRedirectMask;
-    attrs.background_pixel = 0x1A1A1A;
-    attrs.border_pixel = 0x1A1A1A;
-
-    base.systray.window = XCreateWindow(
-        base.display, base.root,
-        0, 0, 1, base.bar.height,
-        0,
-        DefaultDepth(base.display, base.screen),
-        CopyFromParent,
-        DefaultVisual(base.display, base.screen),
-        CWOverrideRedirect | CWEventMask | CWBackPixel | CWBorderPixel,
-        &attrs
-    );
+    // Use the bar window directly as the systray manager
+    base.systray.window = base.bar.window;
 
     XSetSelectionOwner(base.display, base.systray.selection_atom,
                       base.systray.window, CurrentTime);
 
     if (XGetSelectionOwner(base.display, base.systray.selection_atom) != base.systray.window) {
-        XDestroyWindow(base.display, base.systray.window);
         base.systray.window = None;
         return;
     }
 
+    // Announce that we're the system tray
     XEvent ev;
     memset(&ev, 0, sizeof(ev));
     ev.xclient.type = ClientMessage;
@@ -90,25 +76,6 @@ void nwm::systray_init(Base &base) {
                    XA_CARDINAL, 32, PropModeReplace,
                    (unsigned char *)&orientation, 1);
 
-    Atom visual_atom = XInternAtom(base.display, "_NET_SYSTEM_TRAY_VISUAL", False);
-    XVisualInfo template_info;
-    template_info.screen = base.screen;
-    template_info.depth = 32;
-    template_info.c_class = TrueColor;
-
-    int num_visuals;
-    XVisualInfo *visual_info = XGetVisualInfo(base.display,
-                                             VisualScreenMask | VisualDepthMask | VisualClassMask,
-                                             &template_info, &num_visuals);
-
-    if (visual_info && num_visuals > 0) {
-        XChangeProperty(base.display, base.systray.window, visual_atom,
-                       XA_VISUALID, 32, PropModeReplace,
-                       (unsigned char *)&visual_info[0].visualid, 1);
-        XFree(visual_info);
-    }
-
-    XMapWindow(base.display, base.systray.window);
     XSync(base.display, False);
 }
 
@@ -119,11 +86,10 @@ void nwm::systray_cleanup(Base &base) {
     }
     base.systray.icons.clear();
 
-    if (base.systray.window != None) {
+    if (base.systray.window != None && base.systray.window != base.bar.window) {
         XSetSelectionOwner(base.display, base.systray.selection_atom, None, CurrentTime);
-        XDestroyWindow(base.display, base.systray.window);
-        base.systray.window = None;
     }
+    base.systray.window = None;
 }
 
 int nwm::systray_get_width(Base &base) {
@@ -139,8 +105,27 @@ int nwm::systray_get_width(Base &base) {
 }
 
 void nwm::systray_update(Base &base) {
-    int x_offset = 0;
+    if (base.systray.icons.empty()) {
+        base.bar.systray_width = 0;
+        bar_draw(base);
+        return;
+    }
+
+    int bar_width = WIDTH(base.display, base.screen);
     int tray_y = (base.bar.height - base.systray.icon_size) / 2;
+    
+    // Calculate total systray width
+    int total_width = base.systray.padding;
+    for (const auto &icon : base.systray.icons) {
+        if (icon.mapped) {
+            total_width += base.systray.icon_size + base.systray.padding;
+        }
+    }
+    
+    base.bar.systray_width = total_width;
+    
+    // Position icons from right edge of bar
+    int x_offset = bar_width - total_width;
 
     for (auto &icon : base.systray.icons) {
         if (!icon.mapped) continue;
@@ -153,27 +138,14 @@ void nwm::systray_update(Base &base) {
         XMoveResizeWindow(base.display, icon.window,
                          icon.x, icon.y,
                          icon.width, icon.height);
+        
+        XRaiseWindow(base.display, icon.window);
 
         x_offset += base.systray.icon_size + base.systray.padding;
     }
 
-    int total_width = x_offset + base.systray.padding;
-    if (total_width > 0) {
-        int bar_width = WIDTH(base.display, base.screen);
-        int tray_x = bar_width - total_width - 12;
-
-        int tray_window_y = base.bar_position == 0 ? 0 : HEIGHT(base.display, base.screen) - base.bar.height;
-
-        XMoveResizeWindow(base.display, base.systray.window,
-                         tray_x, tray_window_y,
-                         total_width, base.bar.height);
-
-        XSetWindowBackground(base.display, base.systray.window, 0x1A1A1A);
-        XClearWindow(base.display, base.systray.window);
-        XRaiseWindow(base.display, base.systray.window);
-    }
-
     bar_draw(base);
+    XFlush(base.display);
 }
 
 void nwm::systray_add_icon(Base &base, Window icon) {
@@ -186,7 +158,9 @@ void nwm::systray_add_icon(Base &base, Window icon) {
     XSelectInput(base.display, icon, StructureNotifyMask | PropertyChangeMask);
 
     XAddToSaveSet(base.display, icon);
-    XReparentWindow(base.display, icon, base.systray.window, 0, 0);
+    
+    // Reparent directly to bar window
+    XReparentWindow(base.display, icon, base.bar.window, 0, 0);
 
     TrayIcon tray_icon;
     tray_icon.window = icon;
@@ -199,7 +173,7 @@ void nwm::systray_add_icon(Base &base, Window icon) {
     base.systray.icons.push_back(tray_icon);
 
     systray_send_message(base.display, icon, XEMBED_EMBEDDED_NOTIFY,
-                        0, base.systray.window, 0);
+                        0, base.bar.window, 0);
 
     XMapRaised(base.display, icon);
 

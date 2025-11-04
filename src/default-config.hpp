@@ -48,7 +48,14 @@ using namespace nwm;
 #define FOCUS_COLOR         0x005577
 #define GAP_SIZE            0
 
-#define BAR_POSITION        1
+#define BAR_POSITION        0
+#define BAR_HEIGHT          25
+#define BAR_BG_COLOR        0x222222
+#define BAR_FG_COLOR        0xeeeeee
+#define BAR_ACTIVE_COLOR    0x005577
+#define BAR_ACCENT_COLOR    0x005577
+#define BAR_INACTIVE_COLOR  0x444444
+#define BAR_INDICATOR_COLOR 0xFFFFFF
 #define USE_BUILTIN_BAR     1
 
 #define SHOW_WINDOW_TITLES  0

@@ -85,6 +85,13 @@ struct Base {
     bool horizontal_mode;
     bool bar_visible;
     int bar_position;
+    int bar_height;
+    unsigned long bar_bg_color;
+    unsigned long bar_fg_color;
+    unsigned long bar_active_color;
+    unsigned long bar_inactive_color;
+    unsigned long bar_accent_color;
+    unsigned long bar_indicator_color;
     bool resizing;
     int resize_start_width;
     int resize_start_height;
@@ -193,7 +200,6 @@ void set_scroll_visible(void *arg, Base &base);
 void increment_scroll_visible(void *arg, Base &base);
 void decrement_scroll_visible(void *arg, Base &base);
 
-// Title bar functions
 void titlebar_init(ManagedWindow* window, Base &base);
 void titlebar_cleanup(ManagedWindow* window, Base &base);
 void titlebar_draw(ManagedWindow* window, Base &base);
