@@ -1421,10 +1421,6 @@ void nwm::handle_button_press(XButtonEvent *e, Base &base) {
         }
     }
 
-    if (e->window == base.systray.window) {
-        return;
-    }
-
     if (e->window == base.bar.window) {
         if (e->button == Button1) {
             bar_handle_click(base, e->x, e->y, e->button);
