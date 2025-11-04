@@ -105,7 +105,7 @@ static const int scroll_visible_3 = 3;
 static const int scroll_visible_4 = 4;
 static const int scroll_visible_5 = 5;
 
-static struct {
+inline __attribute__((unused)) const struct {
     unsigned int mod;
     KeySym keysym;
     void (*func)(void*, nwm::Base&);

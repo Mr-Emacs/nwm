@@ -5,63 +5,6 @@
 #include <X11/Xlib.h>
 #include "animations.hpp"
 
-static void update_titlebar_position(nwm::ManagedWindow* w, nwm::Base &base) {
-    if (!w->has_titlebar) return;
-
-    w->titlebar.x = w->x - base.border_width;
-    w->titlebar.y = w->y - base.titlebar_height;
-    w->titlebar.width = w->width + (2 * base.border_width);
-
-    XMoveResizeWindow(base.display, w->titlebar.window,
-                     w->titlebar.x, w->titlebar.y,
-                     w->titlebar.width, w->titlebar.height);
-
-    XRaiseWindow(base.display, w->titlebar.window);
-    nwm::titlebar_draw(w, base);
-}
-
-static void ensure_focused_floating_on_top(Display *display, nwm::Base &base) {
-    if (base.focused_window &&
-        (base.focused_window->is_floating || base.focused_window->is_fullscreen)) {
-        XRaiseWindow(display, base.focused_window->window);
-    }
-}
-
-static void atomic_restack(Display *display, nwm::Base &base, std::vector<Window> &stack_order) {
-    (void)base;
-    if (stack_order.empty()) return;
-    XRestackWindows(display, stack_order.data(), stack_order.size());
-}
-
-static void raise_override_windows(Display *display, nwm::Base &base) {
-    Window root = DefaultRootWindow(display);
-    Window root_return, parent_return;
-    Window *children;
-    unsigned int nchildren;
-
-    if (!XQueryTree(display, root, &root_return, &parent_return, &children, &nchildren)) {
-        return;
-    }
-
-    for (unsigned int i = 0; i < nchildren; ++i) {
-        XWindowAttributes attr;
-        if (XGetWindowAttributes(display, children[i], &attr)) {
-            if (attr.override_redirect && attr.map_state == IsViewable) {
-                if (children[i] != base.bar.window && children[i] != base.systray.window) {
-                    bool is_large = (attr.width > attr.screen->width / 4 && attr.height > attr.screen->height / 4);
-
-                    if (is_large) {
-                        XRaiseWindow(display, children[i]);
-                    }
-                }
-            }
-        }
-    }
-
-    if (children) {
-        XFree(children);
-    }
-}
 
 void nwm::tile_horizontal(Base &base) {
     auto &current_ws = get_current_workspace(base);

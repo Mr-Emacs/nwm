@@ -108,15 +108,29 @@ void nwm::bar_update_status_text(Base &base) {
 }
 
 void nwm::bar_draw(Base &base) {
-    XClearWindow(base.display, base.bar.window);
+    Pixmap pixmap = XCreatePixmap(base.display, base.bar.window,
+                                   base.bar.width, base.bar.height,
+                                   DefaultDepth(base.display, base.screen));
+
+    GC gc = XCreateGC(base.display, pixmap, 0, nullptr);
+
+    XSetForeground(base.display, gc, base.bar_bg_color);
+    XFillRectangle(base.display, pixmap, gc, 0, 0, base.bar.width, base.bar.height);
+
+    XftDraw* pixmap_draw = XftDrawCreate(base.display, pixmap,
+                                         DefaultVisual(base.display, base.screen),
+                                         DefaultColormap(base.display, base.screen));
+
     base.bar.segments.clear();
 
-    if (!base.xft_font || !base.bar.xft_draw) return;
+    if (!base.xft_font || !pixmap_draw) {
+        XFreeGC(base.display, gc);
+        XFreePixmap(base.display, pixmap);
+        return;
+    }
 
     int x_offset = 0;
     int y_offset = base.bar.height / 2 + 6;
-
-    GC gc = XCreateGC(base.display, base.bar.window, 0, nullptr);
 
     for (size_t i = 0; i < base.workspaces.size(); ++i) {
         std::string ws_label = base.widget[i % base.widget.size()];
@@ -136,26 +150,26 @@ void nwm::bar_draw(Base &base) {
 
         if (is_active) {
             XSetForeground(base.display, gc, base.bar.xft_active.pixel);
-            XFillRectangle(base.display, base.bar.window, gc,
+            XFillRectangle(base.display, pixmap, gc,
                           btn_x, btn_y, btn_width, btn_height);
 
             int square_size = 5;
             int square_margin = 2;
             XSetForeground(base.display, gc, base.bar_fg_color);
-            XFillRectangle(base.display, base.bar.window, gc,
+            XFillRectangle(base.display, pixmap, gc,
                           btn_x + square_margin,
                           btn_y + square_margin,
                           square_size, square_size);
 
-            XftDrawStringUtf8(base.bar.xft_draw, &base.bar.xft_fg, base.xft_font,
+            XftDrawStringUtf8(pixmap_draw, &base.bar.xft_fg, base.xft_font,
                              btn_x + 8, y_offset,
                              (XftChar8*)ws_label.c_str(), ws_label.length());
         } else if (has_windows) {
-            XftDrawStringUtf8(base.bar.xft_draw, &base.bar.xft_fg, base.xft_font,
+            XftDrawStringUtf8(pixmap_draw, &base.bar.xft_fg, base.xft_font,
                              btn_x + 8, y_offset,
                              (XftChar8*)ws_label.c_str(), ws_label.length());
         } else {
-            XftDrawStringUtf8(base.bar.xft_draw, &base.bar.xft_inactive, base.xft_font,
+            XftDrawStringUtf8(pixmap_draw, &base.bar.xft_inactive, base.xft_font,
                              btn_x + 8, y_offset,
                              (XftChar8*)ws_label.c_str(), ws_label.length());
         }
@@ -173,7 +187,33 @@ void nwm::bar_draw(Base &base) {
     }
 
     Monitor *mon = get_current_monitor(base);
-    std::string layout_mode = (mon && mon->horizontal_mode) ? "[S]" : "[]=";
+    std::string layout_mode;
+
+    if (mon) {
+        auto &current_ws = get_current_workspace(base);
+
+        int floating_count = 0;
+        int total_count = 0;
+
+        for (auto &w : current_ws.windows) {
+            if (!w.is_fullscreen && w.monitor == mon->id) {
+                total_count++;
+                if (w.is_floating) {
+                    floating_count++;
+                }
+            }
+        }
+
+        if (total_count > 0 && floating_count == total_count) {
+            layout_mode = "><>";
+        } else if (mon->horizontal_mode) {
+            layout_mode = "[S]";
+        } else {
+            layout_mode = "[]=";
+        }
+    } else {
+        layout_mode = "[]=";
+    }
 
     XGlyphInfo layout_ext;
     XftTextExtentsUtf8(base.display, base.xft_font,
@@ -182,7 +222,7 @@ void nwm::bar_draw(Base &base) {
 
     int layout_width = layout_ext.width + 16;
 
-    XftDrawStringUtf8(base.bar.xft_draw, &base.bar.xft_fg, base.xft_font,
+    XftDrawStringUtf8(pixmap_draw, &base.bar.xft_fg, base.xft_font,
                      x_offset + 8, y_offset,
                      (XftChar8*)layout_mode.c_str(), layout_mode.length());
 
@@ -201,7 +241,7 @@ void nwm::bar_draw(Base &base) {
     int title_bar_width = base.bar.width - x_offset - status_width - base.bar.systray_width;
 
     XSetForeground(base.display, gc, base.bar.xft_active.pixel);
-    XFillRectangle(base.display, base.bar.window, gc,
+    XFillRectangle(base.display, pixmap, gc,
                   x_offset, 0, title_bar_width, base.bar.height);
 
     std::string window_title = "";
@@ -213,7 +253,7 @@ void nwm::bar_draw(Base &base) {
     }
 
     if (!window_title.empty()) {
-        XftDrawStringUtf8(base.bar.xft_draw, &base.bar.xft_fg, base.xft_font,
+        XftDrawStringUtf8(pixmap_draw, &base.bar.xft_fg, base.xft_font,
                          x_offset + 8, y_offset,
                          (XftChar8*)window_title.c_str(), window_title.length());
     }
@@ -221,13 +261,18 @@ void nwm::bar_draw(Base &base) {
     if (!base.bar.status_text.empty()) {
         int status_x = base.bar.width - status_width - base.bar.systray_width + 10;
 
-        XftDrawStringUtf8(base.bar.xft_draw, &base.bar.xft_fg, base.xft_font,
+        XftDrawStringUtf8(pixmap_draw, &base.bar.xft_fg, base.xft_font,
                          status_x, y_offset,
                          (XftChar8*)base.bar.status_text.c_str(),
                          base.bar.status_text.length());
     }
 
+    XCopyArea(base.display, pixmap, base.bar.window, gc,
+              0, 0, base.bar.width, base.bar.height, 0, 0);
+
+    XftDrawDestroy(pixmap_draw);
     XFreeGC(base.display, gc);
+    XFreePixmap(base.display, pixmap);
     XFlush(base.display);
 }
 
@@ -255,7 +300,6 @@ void nwm::bar_handle_click(Base &base, int x, int y, int button) {
     }
 }
 
-// TODO: implementation
 void nwm::bar_handle_motion(Base &base, int x, int y) {
     (void)base;
     (void)x;

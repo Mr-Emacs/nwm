@@ -1,4 +1,4 @@
-CXXFLAGS = -std=c++14 -O3 -Wall -Wextra -Wpedantic -Wstrict-aliasing
+CXXFLAGS = -std=c++17 -O3 -Wall -Wextra -Wpedantic -Wstrict-aliasing
 
 SRC      = src/nwm.cpp src/bar.cpp src/tiling.cpp src/systray.cpp src/animations.cpp
 OBJ      = src/nwm.o src/bar.o src/tiling.o src/systray.o src/animations.o
