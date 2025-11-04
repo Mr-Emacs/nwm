@@ -467,6 +467,15 @@ void nwm::raise_override_redirect_windows(Display *display) {
 }
 
 void nwm::handle_property_notify(XPropertyEvent *e, Base &base) {
+    if (e->window == base.root) {
+        Atom wm_name = XInternAtom(base.display, "WM_NAME", False);
+        if (e->atom == wm_name) {
+            bar_update_status_text(base);
+            bar_draw(base);
+            return;
+        }
+    }
+
     if (!base.show_window_titles) return;
 
     Atom net_wm_name = XInternAtom(base.display, "_NET_WM_NAME", False);
@@ -2003,6 +2012,13 @@ void nwm::init(Base &base) {
     base.widget = WIDGET;
     base.bar_visible = true;
     base.bar_position = BAR_POSITION;
+    base.bar_height = BAR_HEIGHT;
+    base.bar_bg_color = BAR_BG_COLOR;
+    base.bar_fg_color = BAR_FG_COLOR;
+    base.bar_active_color = BAR_ACTIVE_COLOR;
+    base.bar_inactive_color = BAR_INACTIVE_COLOR;
+    base.bar_accent_color = BAR_ACCENT_COLOR;
+    base.bar_indicator_color = BAR_INDICATOR_COLOR;
     base.border_width = BORDER_WIDTH;
     base.border_color = BORDER_COLOR;
     base.focus_color = FOCUS_COLOR;
@@ -2465,9 +2481,15 @@ void nwm::run(Base &base) {
 
     XSetErrorHandler(x_error_handler);
 
-    time_t last_bar_update = time(nullptr);
+    bool bar_needs_update = false;
 
     while (base.running) {
+        bool has_animations = base.anim_manager && !base.anim_manager->animations.empty();
+
+        if (!has_animations && !XPending(base.display)) {
+            XEvent e;
+            XPeekEvent(base.display, &e);
+        }
         while (XPending(base.display)) {
             XEvent e;
             XNextEvent(base.display, &e);
@@ -2482,15 +2504,21 @@ void nwm::run(Base &base) {
             switch (e.type) {
                 case PropertyNotify:
                     handle_property_notify(&e.xproperty, base);
+                    if (e.xproperty.window == base.root) {
+                        bar_needs_update = true;
+                    }
                     break;
                 case MapRequest:
                     handle_map_request(&e.xmaprequest, base);
+                    bar_needs_update = true;
                     break;
                 case UnmapNotify:
                     handle_unmap_notify(&e.xunmap, base);
+                    bar_needs_update = true;
                     break;
                 case DestroyNotify:
                     handle_destroy_notify(&e.xdestroywindow, base);
+                    bar_needs_update = true;
                     break;
                 case ConfigureRequest:
                     handle_configure_request(&e.xconfigurerequest, base);
@@ -2521,17 +2549,21 @@ void nwm::run(Base &base) {
             }
         }
 
-        animations_update(base);
-
-        time_t now = time(nullptr);
-        if (now - last_bar_update >= 10) {
-            base.bar.systray_width = systray_get_width(base);
-            bar_update_time(base);
-            last_bar_update = now;
+        if (has_animations) {
+            animations_update(base);
         }
 
-        usleep(16666);
+        if (bar_needs_update) {
+            base.bar.systray_width = systray_get_width(base);
+            bar_draw(base);
+            bar_needs_update = false;
+        }
+
+        if (has_animations) {
+            usleep(16666);
+        }
     }
+
 }
 
 int main(int argc, char **argv) {
