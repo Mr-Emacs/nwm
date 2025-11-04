@@ -734,6 +734,7 @@ void nwm::move_to_workspace(void *arg, Base &base) {
     int target_ws = *(int*)arg;
     if (target_ws < 0 || target_ws >= NUM_WORKSPACES) return;
 
+    if (target_ws == (int)base.current_workspace) return;
     auto &current_ws = get_current_workspace(base);
 
     for (auto it = current_ws.windows.begin(); it != current_ws.windows.end(); ++it) {
