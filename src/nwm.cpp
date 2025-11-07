@@ -2564,7 +2564,11 @@ void nwm::run(Base &base) {
 }
 
 int main(int argc, char **argv) {
-    (void)argc;
+    if (argc == 2 && strcmp(argv[1], "-v") == 0) {
+        printf("nwm %.1f\n", VERSION);
+        return 0;
+    }
+
     nwm::Base wm;
     nwm::init(wm);
     nwm::run(wm);
