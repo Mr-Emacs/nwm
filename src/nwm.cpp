@@ -679,18 +679,22 @@ void nwm::switch_workspace(void *arg, Base &base) {
     if (target_ws < 0 || target_ws >= NUM_WORKSPACES) return;
     if (target_ws == (int)base.current_workspace) return;
 
-    if (base.anim_manager && base.anim_manager->animations_enabled &&
-        base.anim_manager->workspace_switch_enabled) {
-        animate_workspace_switch(base, base.current_workspace, target_ws);
+    if (base.anim_manager) {
+        cancel_all_animations(base);
     }
 
-    for (auto &w : get_current_workspace(base).windows) {
-        XUnmapWindow(base.display, w.window);
-        if (w.has_titlebar) {
-            XUnmapWindow(base.display, w.titlebar.window);
+    auto &current_ws = base.workspaces[base.current_workspace];
+
+    for (auto &w : current_ws.windows) {
+        if (!is_window_animating(base, w.window)) {
+            XUnmapWindow(base.display, w.window);
+            if (w.has_titlebar) {
+                XUnmapWindow(base.display, w.titlebar.window);
+            }
         }
     }
 
+    int old_workspace = base.current_workspace;
     base.current_workspace = target_ws;
 
     Monitor *mon = get_current_monitor(base);
@@ -698,9 +702,14 @@ void nwm::switch_workspace(void *arg, Base &base) {
         mon->current_workspace = target_ws;
     }
 
-    base.focused_window = get_current_workspace(base).focused_window;
+    if (base.anim_manager && base.anim_manager->animations_enabled &&
+        base.anim_manager->workspace_switch_enabled) {
+        animate_workspace_switch(base, old_workspace, target_ws);
+    }
 
-    for (auto &w : get_current_workspace(base).windows) {
+    auto &new_ws = base.workspaces[target_ws];
+
+    for (auto &w : new_ws.windows) {
         XMapWindow(base.display, w.window);
         if (w.has_titlebar && !w.is_floating && !w.is_fullscreen) {
             XMapWindow(base.display, w.titlebar.window);
@@ -717,11 +726,36 @@ void nwm::switch_workspace(void *arg, Base &base) {
         tile_windows(base);
     }
 
+    base.focused_window = new_ws.focused_window;
+
     if (base.focused_window) {
-        focus_window(base.focused_window, base);
+        bool found = false;
+        for (auto &w : new_ws.windows) {
+            if (w.window == base.focused_window->window) {
+                found = true;
+                break;
+            }
+        }
+
+        if (found) {
+            focus_window(base.focused_window, base);
+        } else {
+            base.focused_window = nullptr;
+            new_ws.focused_window = nullptr;
+            if (!new_ws.windows.empty()) {
+                focus_window(&new_ws.windows[0], base);
+            }
+        }
+    } else if (!new_ws.windows.empty()) {
+        focus_window(&new_ws.windows[0], base);
+    } else {
+        base.focused_window = nullptr;
+        XSetInputFocus(base.display, base.root, RevertToPointerRoot, CurrentTime);
     }
 
     bar_update_workspaces(base);
+
+    XSync(base.display, False);
 }
 
 void nwm::move_to_workspace(void *arg, Base &base) {
