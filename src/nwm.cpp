@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <cassert>
 #include <vector>
 #include <string>
 #include "animations.hpp"
@@ -2597,19 +2598,27 @@ void nwm::run(Base &base) {
 
 }
 
+#define SHIFT(xs, xz) (assert(xz > 0), xz--, *xs++)
+
 int main(int argc, char **argv) {
-    if (argc == 2 && strcmp(argv[1], "-v") == 0) {
-        printf("nwm %.1f\n", VERSION);
-        return 0;
+    std::string git_hash = SHIFT(argv, argc);
+    if(argc > 0) {
+        if (strcmp(git_hash.c_str(), "-git-hash") == 0)
+            std::cout << GIT_VERSION << std::endl;
+        else if (strcmp(git_hash.c_str(), "-version") == 0)
+            std::cout << argv[0] << ":" << MAJOR_VERSION << MINOR_VERSION << PATCH_VERSION << std::endl;
+        else
+            std::cerr << "[ERROR]: Unknown command" << std::endl;
+    }
+    else {
+        nwm::Base wm;
+        nwm::init(wm);
+        nwm::run(wm);
+        nwm::cleanup(wm);
+        if (wm.restart == true) {
+            execv(*argv, argv);
+            perror("Failed to execv");
+        }
     }
 
-    nwm::Base wm;
-    nwm::init(wm);
-    nwm::run(wm);
-    nwm::cleanup(wm);
-    if (wm.restart == true) {
-        execv(*argv, argv);
-        perror("Failed to execv");
-    }
-    return 0;
 }

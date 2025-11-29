@@ -1,6 +1,10 @@
 #ifndef NWM_HPP
 #define NWM_HPP
 
+#define MAJOR_VERSION 1
+#define MINOR_VERSION 0
+#define PATCH_VERSION 0
+
 #include <X11/Xlib.h>
 #include <X11/cursorfont.h>
 #include <X11/Xft/Xft.h>
@@ -10,8 +14,6 @@
 #include <vector>
 #include "bar.hpp"
 #include "systray.hpp"
-
-#define VERSION 1.0
 
 #define WIDTH(display, screen_number) XDisplayWidth((display), (screen_number))
 #define HEIGHT(display, screen_number) XDisplayHeight((display), (screen_number))
