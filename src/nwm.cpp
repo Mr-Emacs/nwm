@@ -2508,17 +2508,16 @@ void nwm::run(Base &base) {
 
 }
 
-#define SHIFT(xs, xz) (assert(xz > 0), xz--, *xs++)
-
 int main(int argc, char **argv) {
-    std::string git_hash = SHIFT(argv, argc);
-    if(argc > 0) {
-        if (strcmp(git_hash.c_str(), "-git-hash") == 0)
+    char **program_name = argv;
+        if (argc > 1) {
+        std::string cmd = argv[1];
+        if (cmd == "-git-hash")
             std::cout << GIT_VERSION << std::endl;
-        else if (strcmp(git_hash.c_str(), "-version") == 0)
-            std::cout << argv[0] << ":" << MAJOR_VERSION << MINOR_VERSION << PATCH_VERSION << std::endl;
+        else if (cmd == "-version")
+            std::cout << program_name[0] << ":" << MAJOR_VERSION << "." << MINOR_VERSION << "." << PATCH_VERSION << std::endl;
         else
-            std::cerr << "[ERROR]: Unknown command" << std::endl;
+            std::cerr << "[error]: unknown command: " << cmd << std::endl;
     }
     else {
         nwm::Base wm;
@@ -2526,8 +2525,8 @@ int main(int argc, char **argv) {
         nwm::run(wm);
         nwm::cleanup(wm);
         if (wm.restart == true) {
-            execv(*argv, argv);
-            perror("Failed to execv");
+            execv(program_name[0], program_name);
+            perror("failed to execv");
         }
     }
 
