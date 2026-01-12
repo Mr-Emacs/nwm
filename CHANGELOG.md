@@ -38,3 +38,5 @@ Crate.io creation
 void move_horizontal(void *arg, Base &base, bool forward, bool window_based, bool animate, bool change_focus);
 ```
 - This fix included addition of move_horizontal function.
+
+- Fixed issue of hot reloading was caused by SHIFT macro.
