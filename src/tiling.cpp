@@ -143,35 +143,14 @@ void nwm::resize_master(void *arg, Base &base) {
 }
 
 void nwm::scroll_left(void *arg, Base &base) {
-    (void)arg;
-    if (!base.horizontal_mode) return;
-
-    Monitor *mon = get_current_monitor(base);
-    if (!mon) return;
-
-    auto &current_ws = get_current_workspace(base);
-
-    int scroll_amount;
-    if (current_ws.scroll_maximized) {
-        scroll_amount = mon->width;
-    } else {
-        int scroll_visible = mon->scroll_windows_visible;
-        if (scroll_visible < 1) scroll_visible = 1;
-        scroll_amount = mon->width / scroll_visible;
-    }
-
-    int target_offset = std::max(0, current_ws.scroll_offset - scroll_amount);
-
-    if (base.anim_manager && base.anim_manager->animations_enabled &&
-        base.anim_manager->scroll_enabled) {
-        animate_scroll(base, target_offset);
-    } else {
-        current_ws.scroll_offset = target_offset;
-        tile_horizontal(base);
-    }
+    move_horizontal(arg, base, false, false, true, false);
 }
 
 void nwm::scroll_right(void *arg, Base &base) {
+    move_horizontal(arg, base, true, false, true, false);
+}
+
+void nwm::move_horizontal(void *arg, Base &base, bool forward, bool window_based, bool animate, bool change_focus) {
     (void)arg;
     if (!base.horizontal_mode) return;
 
@@ -179,18 +158,79 @@ void nwm::scroll_right(void *arg, Base &base) {
     if (!mon) return;
 
     auto &current_ws = get_current_workspace(base);
+    if (current_ws.windows.empty()) return;
 
-    int scroll_visible = mon->scroll_windows_visible;
-    if (scroll_visible < 1) scroll_visible = 1;
+    std::vector<ManagedWindow*> all_windows;
+    for (auto &w : current_ws.windows) {
+        all_windows.push_back(&w);
+    }
 
-    int window_width = current_ws.scroll_maximized ? mon->width : (mon->width / scroll_visible);
-    int scroll_amount = current_ws.scroll_maximized ? mon->width : window_width;
+    if (all_windows.empty()) return;
 
-    int total_width = current_ws.windows.size() * window_width;
-    int max_scroll = std::max(0, total_width - mon->width);
+    int target_offset = current_ws.scroll_offset;
 
-    int target_offset = std::min(max_scroll, current_ws.scroll_offset + scroll_amount);
-    if (base.anim_manager && base.anim_manager->animations_enabled &&
+    if (window_based) {
+        int current_idx = -1;
+        for (size_t i = 0; i < all_windows.size(); ++i) {
+            if (current_ws.focused_window && all_windows[i]->window == current_ws.focused_window->window) {
+                current_idx = i;
+                break;
+            }
+        }
+
+        int target_idx;
+        if (forward) {
+            target_idx = (current_idx + 1) % all_windows.size();
+        } else {
+            target_idx = (current_idx - 1 + all_windows.size()) % all_windows.size();
+        }
+
+        if (change_focus) {
+            focus_window(all_windows[target_idx], base);
+        }
+
+        if (!all_windows[target_idx]->is_floating && !all_windows[target_idx]->is_fullscreen) {
+            int window_width = current_ws.scroll_maximized ? mon->width : (mon->width / mon->scroll_windows_visible);
+
+            int tiled_idx = 0;
+            for (int i = 0; i <= target_idx; ++i) {
+                if (!all_windows[i]->is_floating && !all_windows[i]->is_fullscreen) {
+                    if (i == target_idx) break;
+                    tiled_idx++;
+                }
+            }
+
+            target_offset = tiled_idx * window_width;
+
+            if (target_offset < current_ws.scroll_offset) {
+                target_offset = target_offset;
+            } else if (target_offset + window_width > current_ws.scroll_offset + mon->width) {
+                target_offset = target_offset + window_width - mon->width;
+            } else {
+                target_offset = current_ws.scroll_offset;
+            }
+        }
+    } else {
+        int scroll_amount;
+        if (current_ws.scroll_maximized) {
+            scroll_amount = mon->width;
+        } else {
+            int scroll_visible = mon->scroll_windows_visible;
+            if (scroll_visible < 1) scroll_visible = 1;
+            scroll_amount = mon->width / scroll_visible;
+        }
+
+        if (forward) {
+            int window_width = current_ws.scroll_maximized ? mon->width : (mon->width / mon->scroll_windows_visible);
+            int total_width = current_ws.windows.size() * window_width;
+            int max_scroll = std::max(0, total_width - mon->width);
+            target_offset = std::min(max_scroll, current_ws.scroll_offset + scroll_amount);
+        } else {
+            target_offset = std::max(0, current_ws.scroll_offset - scroll_amount);
+        }
+    }
+
+    if (animate && base.anim_manager && base.anim_manager->animations_enabled &&
         base.anim_manager->scroll_enabled) {
         animate_scroll(base, target_offset);
     } else {

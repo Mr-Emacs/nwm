@@ -164,6 +164,8 @@ void resize_master(void *arg, Base &base);
 void scroll_left(void *arg, Base &base);
 void scroll_right(void *arg, Base &base);
 
+void move_horizontal(void *arg, Base &base, bool forward, bool window_based, bool animate, bool change_focus);
+
 void switch_workspace(void *arg, Base &base);
 void move_to_workspace(void *arg, Base &base);
 void workspace_init(Base &base);
