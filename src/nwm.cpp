@@ -1121,101 +1121,11 @@ void nwm::focus_window(ManagedWindow *window, Base &base) {
 }
 
 void nwm::focus_next(void *arg, Base &base) {
-    (void)arg;
-    auto &current_ws = get_current_workspace(base);
-    if (current_ws.windows.empty()) return;
-
-    std::vector<ManagedWindow*> all_windows;
-    for (auto &w : current_ws.windows) {
-        all_windows.push_back(&w);
-    }
-
-    if (all_windows.empty()) return;
-
-    int current_idx = -1;
-    for (size_t i = 0; i < all_windows.size(); ++i) {
-        if (current_ws.focused_window && all_windows[i]->window == current_ws.focused_window->window) {
-            current_idx = i;
-            break;
-        }
-    }
-
-    int next_idx = (current_idx + 1) % all_windows.size();
-    focus_window(all_windows[next_idx], base);
-
-    if (base.horizontal_mode && !all_windows[next_idx]->is_floating && !all_windows[next_idx]->is_fullscreen) {
-        Monitor *mon = get_current_monitor(base);
-        if (!mon) return;
-
-        int window_width = mon->width / 2;
-
-        int tiled_idx = 0;
-        for (int i = 0; i <= next_idx; ++i) {
-            if (!all_windows[i]->is_floating && !all_windows[i]->is_fullscreen) {
-                if (i == next_idx) break;
-                tiled_idx++;
-            }
-        }
-
-        int target_scroll = tiled_idx * window_width;
-
-        if (target_scroll < current_ws.scroll_offset) {
-            current_ws.scroll_offset = target_scroll;
-        } else if (target_scroll + window_width > current_ws.scroll_offset + mon->width) {
-            current_ws.scroll_offset = target_scroll + window_width - mon->width;
-        }
-
-        tile_horizontal(base);
-    }
+    move_horizontal(arg, base, true, true, true, true);
 }
 
 void nwm::focus_prev(void *arg, Base &base) {
-    (void)arg;
-    auto &current_ws = get_current_workspace(base);
-    if (current_ws.windows.empty()) return;
-
-    std::vector<ManagedWindow*> all_windows;
-    for (auto &w : current_ws.windows) {
-        all_windows.push_back(&w);
-    }
-
-    if (all_windows.empty()) return;
-
-    int current_idx = -1;
-    for (size_t i = 0; i < all_windows.size(); ++i) {
-        if (current_ws.focused_window && all_windows[i]->window == current_ws.focused_window->window) {
-            current_idx = i;
-            break;
-        }
-    }
-
-    int prev_idx = (current_idx - 1 + all_windows.size()) % all_windows.size();
-    focus_window(all_windows[prev_idx], base);
-
-    if (base.horizontal_mode && !all_windows[prev_idx]->is_floating && !all_windows[prev_idx]->is_fullscreen) {
-        Monitor *mon = get_current_monitor(base);
-        if (!mon) return;
-
-        int window_width = mon->width / 2;
-
-        int tiled_idx = 0;
-        for (int i = 0; i <= prev_idx; ++i) {
-            if (!all_windows[i]->is_floating && !all_windows[i]->is_fullscreen) {
-                if (i == prev_idx) break;
-                tiled_idx++;
-            }
-        }
-
-        int target_scroll = tiled_idx * window_width;
-
-        if (target_scroll < current_ws.scroll_offset) {
-            current_ws.scroll_offset = target_scroll;
-        } else if (target_scroll + window_width > current_ws.scroll_offset + mon->width) {
-            current_ws.scroll_offset = target_scroll + window_width - mon->width;
-        }
-
-        tile_horizontal(base);
-    }
+    move_horizontal(arg, base, false, true, true, true);
 }
 
 void nwm::move_window(ManagedWindow *window, int x, int y, Base &base) {
