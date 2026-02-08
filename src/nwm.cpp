@@ -1580,10 +1580,10 @@ void nwm::handle_button_release(XButtonEvent *e, Base &base) {
                 if (base.horizontal_mode) {
                     int scroll_visible = mon->scroll_windows_visible;
                     if (scroll_visible < 1) scroll_visible = 1;
-
+                    
                     int base_window_width = mon->width / scroll_visible;
                     mon->master_factor = (float)attr.width / base_window_width;
-
+                    
                     if (mon->master_factor < 0.3f) mon->master_factor = 0.3f;
                     if (mon->master_factor > 3.0f) mon->master_factor = 3.0f;
                 } else {
@@ -1616,7 +1616,6 @@ void nwm::handle_button_release(XButtonEvent *e, Base &base) {
         XFlush(base.display);
     }
 }
-
 
 void nwm::handle_motion_notify(XMotionEvent *e, Base &base) {
     if (e->window == base.systray.window) {
@@ -1689,14 +1688,14 @@ void nwm::handle_motion_notify(XMotionEvent *e, Base &base) {
                     if (base.horizontal_mode) {
                         int scroll_visible = mon->scroll_windows_visible;
                         if (scroll_visible < 1) scroll_visible = 1;
-
+                        
                         int base_window_width = mon->width / scroll_visible;
                         int new_width = base.resize_start_width + delta_x;
-
+                        
                         float new_factor = (float)new_width / base_window_width;
                         if (new_factor < 0.3f) new_factor = 0.3f;
                         if (new_factor > 3.0f) new_factor = 3.0f;
-
+                        
                         mon->master_factor = new_factor;
                         tile_horizontal(base);
                     } else {
@@ -1704,10 +1703,10 @@ void nwm::handle_motion_notify(XMotionEvent *e, Base &base) {
                             if (current_ws.windows[i].window == base.drag_window && i == 0) {
                                 int new_width = base.resize_start_width + delta_x;
                                 float new_factor = (float)new_width / mon->width;
-
+                                
                                 if (new_factor < 0.1f) new_factor = 0.1f;
                                 if (new_factor > 0.9f) new_factor = 0.9f;
-
+                                
                                 mon->master_factor = new_factor;
                                 tile_windows(base);
                                 break;
