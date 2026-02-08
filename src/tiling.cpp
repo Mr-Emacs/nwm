@@ -26,13 +26,17 @@ void nwm::tile_horizontal(Base &base) {
         int scroll_visible = mon.scroll_windows_visible;
         if (scroll_visible < 1) scroll_visible = 1;
 
-        int window_width = current_ws.scroll_maximized ? mon.width : (mon.width / scroll_visible);
+        int base_window_width = mon.width / scroll_visible;
+        int window_width = current_ws.scroll_maximized ? mon.width : (int)(base_window_width * mon.master_factor);
+        
+        if (window_width < 200) window_width = 200;
+        if (window_width > mon.width) window_width = mon.width;
 
         int num_tiled = tiled_windows.size();
         bool all_fit = (num_tiled <= scroll_visible);
         if (all_fit && !current_ws.scroll_maximized) {
             current_ws.scroll_offset = 0;
-            window_width = mon.width / num_tiled;
+            window_width = (int)(base_window_width * mon.master_factor);
         }
 
         for (size_t i = 0; i < tiled_windows.size(); ++i) {
@@ -127,19 +131,35 @@ void nwm::tile_windows(Base &base) {
 
 void nwm::resize_master(void *arg, Base &base) {
     auto &current_ws = get_current_workspace(base);
-    if (current_ws.windows.size() < 2 || base.horizontal_mode) return;
-
     Monitor *mon = get_current_monitor(base);
     if (!mon) return;
 
     int delta = (int)(long)arg;
-    float delta_factor = (float)delta / mon->width;
-    mon->master_factor += delta_factor;
+    
+    if (base.horizontal_mode) {
+        if (current_ws.windows.empty()) return;
+        
+        int scroll_visible = mon->scroll_windows_visible;
+        if (scroll_visible < 1) scroll_visible = 1;
+        
+        float delta_factor = (float)delta / (mon->width / scroll_visible);
+        mon->master_factor += delta_factor;
+        
+        if (mon->master_factor < 0.3f) mon->master_factor = 0.3f;
+        if (mon->master_factor > 3.0f) mon->master_factor = 3.0f;
+        
+        tile_horizontal(base);
+    } else {
+        if (current_ws.windows.size() < 2) return;
+        
+        float delta_factor = (float)delta / mon->width;
+        mon->master_factor += delta_factor;
 
-    if (mon->master_factor < 0.1f) mon->master_factor = 0.1f;
-    if (mon->master_factor > 0.9f) mon->master_factor = 0.9f;
+        if (mon->master_factor < 0.1f) mon->master_factor = 0.1f;
+        if (mon->master_factor > 0.9f) mon->master_factor = 0.9f;
 
-    tile_windows(base);
+        tile_windows(base);
+    }
 }
 
 void nwm::scroll_left(void *arg, Base &base) {
@@ -190,7 +210,11 @@ void nwm::move_horizontal(void *arg, Base &base, bool forward, bool window_based
         }
 
         if (!all_windows[target_idx]->is_floating && !all_windows[target_idx]->is_fullscreen) {
-            int window_width = current_ws.scroll_maximized ? mon->width : (mon->width / mon->scroll_windows_visible);
+            int scroll_visible = mon->scroll_windows_visible;
+            if (scroll_visible < 1) scroll_visible = 1;
+            
+            int base_window_width = mon->width / scroll_visible;
+            int window_width = current_ws.scroll_maximized ? mon->width : (int)(base_window_width * mon->master_factor);
 
             int tiled_idx = 0;
             for (int i = 0; i <= target_idx; ++i) {
@@ -217,11 +241,17 @@ void nwm::move_horizontal(void *arg, Base &base, bool forward, bool window_based
         } else {
             int scroll_visible = mon->scroll_windows_visible;
             if (scroll_visible < 1) scroll_visible = 1;
-            scroll_amount = mon->width / scroll_visible;
+            
+            int base_window_width = mon->width / scroll_visible;
+            scroll_amount = (int)(base_window_width * mon->master_factor);
         }
 
         if (forward) {
-            int window_width = current_ws.scroll_maximized ? mon->width : (mon->width / mon->scroll_windows_visible);
+            int scroll_visible = mon->scroll_windows_visible;
+            if (scroll_visible < 1) scroll_visible = 1;
+            
+            int base_window_width = mon->width / scroll_visible;
+            int window_width = current_ws.scroll_maximized ? mon->width : (int)(base_window_width * mon->master_factor);
             int total_width = current_ws.windows.size() * window_width;
             int max_scroll = std::max(0, total_width - mon->width);
             target_offset = std::min(max_scroll, current_ws.scroll_offset + scroll_amount);
@@ -249,10 +279,12 @@ void nwm::toggle_layout(void *arg, Base &base) {
 
     auto &current_ws = get_current_workspace(base);
     current_ws.scroll_offset = 0;
-
+    
     if (mon->horizontal_mode) {
+        mon->master_factor = 1.0f;
         tile_horizontal(base);
     } else {
+        mon->master_factor = 0.5f;
         tile_windows(base);
     }
 

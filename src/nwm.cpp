@@ -1570,22 +1570,30 @@ void nwm::handle_button_release(XButtonEvent *e, Base &base) {
                 }
             }
 
-            if (!is_floating && !base.horizontal_mode && current_ws.windows.size() >= 2) {
-                for (size_t i = 0; i < current_ws.windows.size(); ++i) {
-                    if (current_ws.windows[i].window == base.drag_window && i == 0) {
-                        Monitor *mon = get_monitor_at_point(base,
-                            current_ws.windows[i].x + current_ws.windows[i].width / 2,
-                            current_ws.windows[i].y + current_ws.windows[i].height / 2);
-                        if (!mon) mon = get_current_monitor(base);
-                        if (!mon) break;
+            if (!is_floating && current_ws.windows.size() >= 1) {
+                Monitor *mon = get_current_monitor(base);
+                if (!mon) return;
 
-                        XWindowAttributes attr;
-                        if (XGetWindowAttributes(base.display, base.drag_window, &attr)) {
+                XWindowAttributes attr;
+                if (!XGetWindowAttributes(base.display, base.drag_window, &attr)) return;
+
+                if (base.horizontal_mode) {
+                    int scroll_visible = mon->scroll_windows_visible;
+                    if (scroll_visible < 1) scroll_visible = 1;
+
+                    int base_window_width = mon->width / scroll_visible;
+                    mon->master_factor = (float)attr.width / base_window_width;
+
+                    if (mon->master_factor < 0.3f) mon->master_factor = 0.3f;
+                    if (mon->master_factor > 3.0f) mon->master_factor = 3.0f;
+                } else {
+                    for (size_t i = 0; i < current_ws.windows.size(); ++i) {
+                        if (current_ws.windows[i].window == base.drag_window && i == 0) {
                             mon->master_factor = (float)attr.width / mon->width;
                             if (mon->master_factor < 0.1f) mon->master_factor = 0.1f;
                             if (mon->master_factor > 0.9f) mon->master_factor = 0.9f;
+                            break;
                         }
-                        break;
                     }
                 }
             }
@@ -1608,6 +1616,7 @@ void nwm::handle_button_release(XButtonEvent *e, Base &base) {
         XFlush(base.display);
     }
 }
+
 
 void nwm::handle_motion_notify(XMotionEvent *e, Base &base) {
     if (e->window == base.systray.window) {
@@ -1654,23 +1663,57 @@ void nwm::handle_motion_notify(XMotionEvent *e, Base &base) {
                 int delta_x = e->x_root - base.drag_start_x;
                 int delta_y = e->y_root - base.drag_start_y;
 
-                int new_width = base.resize_start_width + delta_x;
-                int new_height = base.resize_start_height + delta_y;
+                if (w.is_floating) {
+                    int new_width = base.resize_start_width + delta_x;
+                    int new_height = base.resize_start_height + delta_y;
 
-                if (new_width < 100) new_width = 100;
-                if (new_height < 100) new_height = 100;
+                    if (new_width < 100) new_width = 100;
+                    if (new_height < 100) new_height = 100;
 
-                w.width = new_width;
-                w.height = new_height;
-                XResizeWindow(base.display, w.window, new_width, new_height);
-                XRaiseWindow(base.display, w.window);
+                    w.width = new_width;
+                    w.height = new_height;
+                    XResizeWindow(base.display, w.window, new_width, new_height);
+                    XRaiseWindow(base.display, w.window);
 
-                if (w.has_titlebar) {
-                    w.titlebar.width = new_width + (2 * base.border_width);
-                    XResizeWindow(base.display, w.titlebar.window,
-                                 w.titlebar.width, w.titlebar.height);
-                    XRaiseWindow(base.display, w.titlebar.window);
-                    titlebar_draw(&w, base);
+                    if (w.has_titlebar) {
+                        w.titlebar.width = new_width + (2 * base.border_width);
+                        XResizeWindow(base.display, w.titlebar.window,
+                                     w.titlebar.width, w.titlebar.height);
+                        XRaiseWindow(base.display, w.titlebar.window);
+                        titlebar_draw(&w, base);
+                    }
+                } else {
+                    Monitor *mon = get_current_monitor(base);
+                    if (!mon) break;
+
+                    if (base.horizontal_mode) {
+                        int scroll_visible = mon->scroll_windows_visible;
+                        if (scroll_visible < 1) scroll_visible = 1;
+
+                        int base_window_width = mon->width / scroll_visible;
+                        int new_width = base.resize_start_width + delta_x;
+
+                        float new_factor = (float)new_width / base_window_width;
+                        if (new_factor < 0.3f) new_factor = 0.3f;
+                        if (new_factor > 3.0f) new_factor = 3.0f;
+
+                        mon->master_factor = new_factor;
+                        tile_horizontal(base);
+                    } else {
+                        for (size_t i = 0; i < current_ws.windows.size(); ++i) {
+                            if (current_ws.windows[i].window == base.drag_window && i == 0) {
+                                int new_width = base.resize_start_width + delta_x;
+                                float new_factor = (float)new_width / mon->width;
+
+                                if (new_factor < 0.1f) new_factor = 0.1f;
+                                if (new_factor > 0.9f) new_factor = 0.9f;
+
+                                mon->master_factor = new_factor;
+                                tile_windows(base);
+                                break;
+                            }
+                        }
+                    }
                 }
                 break;
             }
@@ -2508,27 +2551,14 @@ void nwm::run(Base &base) {
 
 }
 
-#define SHIFT(xs, xz) (assert(xz > 0), xz--, *xs++)
-
 int main(int argc, char **argv) {
-    std::string git_hash = SHIFT(argv, argc);
-    if(argc > 0) {
-        if (strcmp(git_hash.c_str(), "-git-hash") == 0)
-            std::cout << GIT_VERSION << std::endl;
-        else if (strcmp(git_hash.c_str(), "-version") == 0)
-            std::cout << argv[0] << ":" << MAJOR_VERSION << MINOR_VERSION << PATCH_VERSION << std::endl;
-        else
-            std::cerr << "[ERROR]: Unknown command" << std::endl;
-    }
-    else {
-        nwm::Base wm;
-        nwm::init(wm);
-        nwm::run(wm);
-        nwm::cleanup(wm);
-        if (wm.restart == true) {
-            execv(*argv, argv);
-            perror("Failed to execv");
-        }
-    }
-
+  (void)argc;
+  nwm::Base wm;
+  nwm::init(wm);
+  nwm::run(wm);
+  nwm::cleanup(wm);
+  if (wm.restart == true) {
+    execv(*argv, argv);
+    perror("Failed to execv");
+  }
 }
