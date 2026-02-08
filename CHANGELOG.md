@@ -24,6 +24,19 @@ Crate.io creation
 - Addition of multi monitor support with libXrandr.
 - Controllable amount of application on horizontal window.
 - Also default-config.hpp will generate config.hpp if u do not have config.hpp
-``c++
+```c++
     #define SCROLL_WINDOWS_VISIBLE 2
 ```
+
+# Feature fix(Mon Jan 12)
+
+ - Unification of scroll-left/right to focus.(@rekado [#18](https://github.com/xsoder/nwm/issues/18))
+ - This feature allows us to have unifed way mostly for those desiring scroll feature.
+ - The pull-request can be viewed here: [#19](https://github.com/xsoder/nwm/pull/19)
+
+```C++
+void move_horizontal(void *arg, Base &base, bool forward, bool window_based, bool animate, bool change_focus);
+```
+- This fix included addition of move_horizontal function.
+
+- Fixed issue of hot reloading was caused by SHIFT macro.
