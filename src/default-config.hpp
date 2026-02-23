@@ -84,6 +84,7 @@ static const char *termcmd[]    = { "kitty",        NULL };
 static const char *emacs[]      = { "emacs",     NULL };
 static const char *dmenucmd[]   = { "dmenu_run", NULL };
 static const char *browser[]    = { "firefox",   NULL };
+static const char *zoomer[]     = { "zoomer",   NULL };
 
 static const int ws0 = 0;
 static const int ws1 = 1;

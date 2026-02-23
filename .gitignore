@@ -7,3 +7,4 @@ install.sh
 src/config.hpp
 TAGS
 test.sh
+src/extension/zoomer/zoomer

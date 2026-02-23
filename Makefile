@@ -50,10 +50,15 @@ version: src/nwm.hpp
 	' src/nwm.hpp > temp_nwm.hpp && mv temp_nwm.hpp src/nwm.hpp
 
 src/%.o: src/%.cpp $(DEPS) version
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -c $< -o $@ 
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -c $< -o $@
 
 nwm: $(OBJ)
 	$(CXX) $(CXXFLAGS) $(OBJ) -o nwm $(LDLIBS)
+
+extension: zoomer
+
+zoomer:
+	$(MAKE) -C src/extension/zoomer
 
 install: nwm
 	mkdir -p $(BINDIR)
