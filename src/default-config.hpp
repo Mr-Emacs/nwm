@@ -115,6 +115,7 @@ inline __attribute__((unused)) const struct {
     { MODKEY,             XK_d,               spawn,          dmenucmd },
     { MODKEY,             XK_c,               spawn,          emacs },
     { MODKEY,             XK_b,               spawn,          browser },
+    { MODKEY,             XK_z,               spawn,          zoomer },
     { MODKEY,             XK_r,               toggle_bar,     NULL },
     { MODKEY,             XK_q,               close_window,   NULL },
 
