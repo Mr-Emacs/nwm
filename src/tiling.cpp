@@ -19,18 +19,69 @@ void nwm::tile_horizontal(Base &base) {
 
         if (tiled_windows.empty()) continue;
 
-        int bar_height = base.bar_visible ? base.bar.height : 0;
-        int usable_height = mon.height - bar_height;
-        int y_start = mon.y + (base.bar_position == 0 ? bar_height : 0);
+        int own_bar = (base.bar_visible && base.use_builtin_bar) ? base.bar.height : 0;
+        int own_bar_top = 0;
+        int own_bar_bottom = 0;
+
+        if (base.bar_position == 0) {
+            own_bar_top = own_bar;
+        } else {
+            own_bar_bottom = own_bar;
+        }
+
+        int strut_top = 0, strut_bottom = 0;
+        int strut_left = 0, strut_right = 0;
+        int screen_height = HEIGHT(base.display, base.screen);
+        int screen_width = WIDTH(base.display, base.screen);
+
+        if (mon.id >= 0 && mon.id < (int)base.struts.size()) {
+            int raw_top = base.struts[mon.id].top;
+            int raw_bottom = base.struts[mon.id].bottom;
+            int raw_left = base.struts[mon.id].left;
+            int raw_right = base.struts[mon.id].right;
+
+            if (raw_top > 0 && raw_top > mon.y) {
+                strut_top = std::min(raw_top - mon.y, mon.height);
+            }
+
+            if (raw_bottom > 0) {
+                int strut_bottom_abs = screen_height - raw_bottom;
+                if (strut_bottom_abs < mon.y + mon.height) {
+                    strut_bottom = std::min((mon.y + mon.height) - strut_bottom_abs, mon.height);
+                }
+            }
+
+            if (raw_left > 0 && raw_left > mon.x) {
+                strut_left = std::min(raw_left - mon.x, mon.width);
+            }
+
+            if (raw_right > 0) {
+                int strut_right_abs = screen_width - raw_right;
+                if (strut_right_abs < mon.x + mon.width) {
+                    strut_right = std::min((mon.x + mon.width) - strut_right_abs, mon.width);
+                }
+            }
+        }
+
+        int reserved_top = std::max(own_bar_top, strut_top);
+        int reserved_bottom = std::max(own_bar_bottom, strut_bottom);
+
+        int usable_height = mon.height - reserved_top - reserved_bottom;
+        int usable_width = mon.width - strut_left - strut_right;
+        int x_start = mon.x + strut_left;
+        int y_start = mon.y + reserved_top;
+
+        if (usable_height < 10) usable_height = mon.height;
+        if (usable_width < 10) usable_width = mon.width;
 
         int scroll_visible = mon.scroll_windows_visible;
         if (scroll_visible < 1) scroll_visible = 1;
 
-        int base_window_width = mon.width / scroll_visible;
-        int window_width = current_ws.scroll_maximized ? mon.width : (int)(base_window_width * mon.master_factor);
-        
+        int base_window_width = usable_width / scroll_visible;
+        int window_width = current_ws.scroll_maximized ? usable_width : (int)(base_window_width * mon.master_factor);
+
         if (window_width < 200) window_width = 200;
-        if (window_width > mon.width) window_width = mon.width;
+        if (window_width > usable_width) window_width = usable_width;
 
         int num_tiled = tiled_windows.size();
         bool all_fit = (num_tiled <= scroll_visible);
@@ -41,10 +92,13 @@ void nwm::tile_horizontal(Base &base) {
 
         for (size_t i = 0; i < tiled_windows.size(); ++i) {
             int scroll_offset = all_fit ? 0 : current_ws.scroll_offset;
-            int x_pos = mon.x + i * window_width - scroll_offset + base.gaps;
+            int x_pos = x_start + i * window_width - scroll_offset + base.gaps;
             int y_pos = y_start + base.gaps;
             int win_width = window_width - 2 * base.gaps - 2 * base.border_width;
             int win_height = usable_height - 2 * base.gaps - 2 * base.border_width;
+
+            if (win_width < 1) win_width = 1;
+            if (win_height < 1) win_height = 1;
 
             tiled_windows[i]->x = x_pos;
             tiled_windows[i]->y = y_pos;
@@ -78,15 +132,69 @@ void nwm::tile_windows(Base &base) {
 
         if (tiled_windows.empty()) continue;
 
-        int bar_height = base.bar_visible && base.use_builtin_bar ? base.bar.height : 0;
-        int usable_height = mon.height - bar_height;
-        int y_start = mon.y + (base.bar_position == 0 ? bar_height : 0);
+        int own_bar = (base.bar_visible && base.use_builtin_bar) ? base.bar.height : 0;
+        int own_bar_top = 0;
+        int own_bar_bottom = 0;
+
+        if (base.bar_position == 0) {
+            own_bar_top = own_bar;
+        } else {
+            own_bar_bottom = own_bar;
+        }
+
+        int strut_top = 0, strut_bottom = 0;
+        int strut_left = 0, strut_right = 0;
+        int screen_height = HEIGHT(base.display, base.screen);
+        int screen_width = WIDTH(base.display, base.screen);
+
+        if (mon.id >= 0 && mon.id < (int)base.struts.size()) {
+            int raw_top = base.struts[mon.id].top;
+            int raw_bottom = base.struts[mon.id].bottom;
+            int raw_left = base.struts[mon.id].left;
+            int raw_right = base.struts[mon.id].right;
+
+            if (raw_top > 0 && raw_top > mon.y) {
+                strut_top = std::min(raw_top - mon.y, mon.height);
+            }
+
+            if (raw_bottom > 0) {
+                int strut_bottom_abs = screen_height - raw_bottom;
+                if (strut_bottom_abs < mon.y + mon.height) {
+                    strut_bottom = std::min((mon.y + mon.height) - strut_bottom_abs, mon.height);
+                }
+            }
+
+            if (raw_left > 0 && raw_left > mon.x) {
+                strut_left = std::min(raw_left - mon.x, mon.width);
+            }
+
+            if (raw_right > 0) {
+                int strut_right_abs = screen_width - raw_right;
+                if (strut_right_abs < mon.x + mon.width) {
+                    strut_right = std::min((mon.x + mon.width) - strut_right_abs, mon.width);
+                }
+            }
+        }
+
+        int reserved_top = std::max(own_bar_top, strut_top);
+        int reserved_bottom = std::max(own_bar_bottom, strut_bottom);
+
+        int usable_height = mon.height - reserved_top - reserved_bottom;
+        int usable_width = mon.width - strut_left - strut_right;
+        int x_start = mon.x + strut_left;
+        int y_start = mon.y + reserved_top;
+
+        if (usable_height < 10) usable_height = mon.height;
+        if (usable_width < 10) usable_width = mon.width;
 
         if (tiled_windows.size() == 1) {
-            tiled_windows[0]->x = mon.x + base.gaps;
+            tiled_windows[0]->x = x_start + base.gaps;
             tiled_windows[0]->y = y_start + base.gaps;
-            tiled_windows[0]->width = mon.width - 2 * base.gaps - 2 * base.border_width;
+            tiled_windows[0]->width = usable_width - 2 * base.gaps - 2 * base.border_width;
             tiled_windows[0]->height = usable_height - 2 * base.gaps - 2 * base.border_width;
+
+            if (tiled_windows[0]->width < 1) tiled_windows[0]->width = 1;
+            if (tiled_windows[0]->height < 1) tiled_windows[0]->height = 1;
 
             XMoveResizeWindow(base.display, tiled_windows[0]->window,
                              tiled_windows[0]->x, tiled_windows[0]->y,
@@ -97,16 +205,21 @@ void nwm::tile_windows(Base &base) {
                 nwm::titlebar_draw(tiled_windows[0], base);
             }
         } else {
-            int master_width = (int)(mon.width * mon.master_factor) - base.gaps - base.gaps / 2 - 2 * base.border_width;
-            int stack_x = mon.x + (int)(mon.width * mon.master_factor) + base.gaps / 2;
-            int stack_width = mon.width - (int)(mon.width * mon.master_factor) - base.gaps - base.gaps / 2 - 2 * base.border_width;
+            int master_width = (int)(usable_width * mon.master_factor) - base.gaps - base.gaps / 2 - 2 * base.border_width;
+            int stack_x = x_start + (int)(usable_width * mon.master_factor) + base.gaps / 2;
+            int stack_width = usable_width - (int)(usable_width * mon.master_factor) - base.gaps - base.gaps / 2 - 2 * base.border_width;
+
+            if (master_width < 1) master_width = 1;
+            if (stack_width < 1) stack_width = 1;
 
             int stack_height = (usable_height - base.gaps * tiled_windows.size()) / (tiled_windows.size() - 1) - 2 * base.border_width;
+            if (stack_height < 1) stack_height = 1;
 
-            tiled_windows[0]->x = mon.x + base.gaps;
+            tiled_windows[0]->x = x_start + base.gaps;
             tiled_windows[0]->y = y_start + base.gaps;
             tiled_windows[0]->width = master_width;
             tiled_windows[0]->height = usable_height - 2 * base.gaps - 2 * base.border_width;
+            if (tiled_windows[0]->height < 1) tiled_windows[0]->height = 1;
 
             for (size_t i = 1; i < tiled_windows.size(); ++i) {
                 tiled_windows[i]->x = stack_x;
@@ -135,23 +248,23 @@ void nwm::resize_master(void *arg, Base &base) {
     if (!mon) return;
 
     int delta = (int)(long)arg;
-    
+
     if (base.horizontal_mode) {
         if (current_ws.windows.empty()) return;
-        
+
         int scroll_visible = mon->scroll_windows_visible;
         if (scroll_visible < 1) scroll_visible = 1;
-        
+
         float delta_factor = (float)delta / (mon->width / scroll_visible);
         mon->master_factor += delta_factor;
-        
+
         if (mon->master_factor < 0.3f) mon->master_factor = 0.3f;
         if (mon->master_factor > 3.0f) mon->master_factor = 3.0f;
-        
+
         tile_horizontal(base);
     } else {
         if (current_ws.windows.size() < 2) return;
-        
+
         float delta_factor = (float)delta / mon->width;
         mon->master_factor += delta_factor;
 
@@ -212,7 +325,7 @@ void nwm::move_horizontal(void *arg, Base &base, bool forward, bool window_based
         if (!all_windows[target_idx]->is_floating && !all_windows[target_idx]->is_fullscreen) {
             int scroll_visible = mon->scroll_windows_visible;
             if (scroll_visible < 1) scroll_visible = 1;
-            
+
             int base_window_width = mon->width / scroll_visible;
             int window_width = current_ws.scroll_maximized ? mon->width : (int)(base_window_width * mon->master_factor);
 
@@ -241,7 +354,7 @@ void nwm::move_horizontal(void *arg, Base &base, bool forward, bool window_based
         } else {
             int scroll_visible = mon->scroll_windows_visible;
             if (scroll_visible < 1) scroll_visible = 1;
-            
+
             int base_window_width = mon->width / scroll_visible;
             scroll_amount = (int)(base_window_width * mon->master_factor);
         }
@@ -249,7 +362,7 @@ void nwm::move_horizontal(void *arg, Base &base, bool forward, bool window_based
         if (forward) {
             int scroll_visible = mon->scroll_windows_visible;
             if (scroll_visible < 1) scroll_visible = 1;
-            
+
             int base_window_width = mon->width / scroll_visible;
             int window_width = current_ws.scroll_maximized ? mon->width : (int)(base_window_width * mon->master_factor);
             int total_width = current_ws.windows.size() * window_width;
@@ -279,7 +392,7 @@ void nwm::toggle_layout(void *arg, Base &base) {
 
     auto &current_ws = get_current_workspace(base);
     current_ws.scroll_offset = 0;
-    
+
     if (mon->horizontal_mode) {
         mon->master_factor = 1.0f;
         tile_horizontal(base);

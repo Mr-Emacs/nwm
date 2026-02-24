@@ -32,6 +32,109 @@ int x_error_handler(Display *dpy, XErrorEvent *error) {
     return 0;
 }
 
+void nwm::update_struts(Base &base) {
+    base.struts.resize(base.monitors.size(), {0, 0, 0, 0});
+    for (auto &s : base.struts) s = {0, 0, 0, 0};
+
+    Window root_r, parent_r;
+    Window *children = nullptr;
+    unsigned int nchildren = 0;
+    if (!XQueryTree(base.display, base.root, &root_r, &parent_r,
+    &children, &nchildren))
+    return;
+
+    Atom dock_type   = XInternAtom(base.display, "_NET_WM_WINDOW_TYPE_DOCK", False);
+    Atom wtype_atom  = XInternAtom(base.display, "_NET_WM_WINDOW_TYPE",      False);
+    Atom strut_atom  = XInternAtom(base.display, "_NET_WM_STRUT_PARTIAL",    False);
+    Atom strut_basic = XInternAtom(base.display, "_NET_WM_STRUT",            False);
+
+    for (unsigned int i = 0; i < nchildren; ++i) {
+        Window w = children[i];
+
+        XWindowAttributes attr;
+        if (!XGetWindowAttributes(base.display, w, &attr)) continue;
+        if (attr.map_state != IsViewable) continue;
+
+        Atom actual_type; int actual_fmt;
+        unsigned long nitems, bytes_after;
+        unsigned char *prop = nullptr;
+
+        bool is_dock = false;
+        if (XGetWindowProperty(base.display, w, wtype_atom, 0, 1, False,
+        XA_ATOM, &actual_type, &actual_fmt,
+        &nitems, &bytes_after, &prop) == Success && prop) {
+            if (*(Atom*)prop == dock_type) is_dock = true;
+            XFree(prop);
+        }
+        if (!is_dock) continue;
+
+        long strut[12] = {};
+        bool got_strut = false;
+
+        prop = nullptr;
+        if (XGetWindowProperty(base.display, w, strut_atom, 0, 12, False,
+        XA_CARDINAL, &actual_type, &actual_fmt,
+        &nitems, &bytes_after, &prop) == Success && prop) {
+            if (nitems >= 4) {
+                long *vals = (long*)prop;
+                for (int k = 0; k < (int)nitems && k < 12; ++k)
+                strut[k] = vals[k];
+                got_strut = true;
+            }
+            XFree(prop);
+        }
+
+        if (!got_strut) {
+            prop = nullptr;
+            if (XGetWindowProperty(base.display, w, strut_basic, 0, 4, False,
+            XA_CARDINAL, &actual_type, &actual_fmt,
+            &nitems, &bytes_after, &prop) == Success && prop) {
+                if (nitems >= 4) {
+                    long *vals = (long*)prop;
+                    for (int k = 0; k < 4; ++k) strut[k] = vals[k];
+                    got_strut = true;
+                }
+                XFree(prop);
+            }
+        }
+
+        if (!got_strut) continue;
+
+        Monitor *mon = get_monitor_at_point(base,
+                                            attr.x + attr.width / 2,
+                                            attr.y + attr.height / 2);
+        if (!mon) mon = get_current_monitor(base);
+        if (!mon) continue;
+
+        int idx = mon->id;
+        if (idx < 0 || idx >= (int)base.struts.size()) continue;
+
+        if (strut[0] > base.struts[idx].left)   base.struts[idx].left   = (int)strut[0];
+        if (strut[1] > base.struts[idx].right)  base.struts[idx].right  = (int)strut[1];
+        if (strut[2] > base.struts[idx].top)    base.struts[idx].top    = (int)strut[2];
+        if (strut[3] > base.struts[idx].bottom) base.struts[idx].bottom = (int)strut[3];
+    }
+
+    if (children) XFree(children);
+}
+
+void nwm::ewmh_update_client_list(Base &base) {
+    std::vector<Window> clients;
+    for (auto &ws : base.workspaces)
+        for (auto &w : ws.windows)
+        clients.push_back(w.window);
+
+    Atom net_client_list = XInternAtom(base.display, "_NET_CLIENT_LIST", False);
+    if (clients.empty()) {
+        XDeleteProperty(base.display, base.root, net_client_list);
+    } else {
+        XChangeProperty(base.display, base.root, net_client_list, XA_WINDOW, 32,
+        PropModeReplace,
+        (unsigned char*)clients.data(), (int)clients.size());
+    }
+    XSync(base.display, False);
+}
+
 void nwm::monitors_init(Base &base) {
     base.monitors.clear();
     base.current_monitor = 0;
@@ -226,6 +329,7 @@ void nwm::monitors_update(Base &base) {
     } else {
         tile_windows(base);
     }
+    update_struts(base);
 }
 
 nwm::Monitor* nwm::get_monitor_at_point(Base &base, int x, int y) {
@@ -684,6 +788,13 @@ void nwm::switch_workspace(void *arg, Base &base) {
         cancel_all_animations(base);
     }
 
+    {
+    long desktop = target_ws;
+    Atom ncd = XInternAtom(base.display, "_NET_CURRENT_DESKTOP", False);
+    XChangeProperty(base.display, base.root, ncd, XA_CARDINAL, 32,
+                    PropModeReplace, (unsigned char*)&desktop, 1);
+    }
+
     auto &current_ws = base.workspaces[base.current_workspace];
 
     for (auto &w : current_ws.windows) {
@@ -1066,6 +1177,7 @@ void nwm::unmanage_window(Window window, Base &base) {
             current_ws.scroll_offset = std::min(current_ws.scroll_offset, max_scroll);
         }
     }
+    ewmh_update_client_list(base);
 }
 
 void nwm::focus_window(ManagedWindow *window, Base &base) {
@@ -1253,6 +1365,7 @@ void nwm::handle_map_request(XMapRequestEvent *e, Base &base) {
             XRaiseWindow(base.display, new_window->window);
         }
     }
+    update_struts(base);
 }
 
 void nwm::handle_unmap_notify(XUnmapEvent *e, Base &base) {
@@ -1263,6 +1376,7 @@ void nwm::handle_unmap_notify(XUnmapEvent *e, Base &base) {
     } else {
         tile_windows(base);
     }
+    update_struts(base);
 }
 
 void nwm::handle_destroy_notify(XDestroyWindowEvent *e, Base &base) {
@@ -1280,6 +1394,7 @@ void nwm::handle_destroy_notify(XDestroyWindowEvent *e, Base &base) {
     } else {
         tile_windows(base);
     }
+    update_struts(base);
 }
 
 void nwm::handle_configure_request(XConfigureRequestEvent *e, Base &base) {
@@ -1323,6 +1438,45 @@ void nwm::handle_configure_request(XConfigureRequestEvent *e, Base &base) {
 
 void nwm::handle_client_message(XClientMessageEvent *e, Base &base) {
     systray_handle_client_message(base, e);
+
+    Atom net_current_desktop = XInternAtom(base.display, "_NET_CURRENT_DESKTOP", False);
+    if (e->message_type == net_current_desktop) {
+        int target = (int)e->data.l[0];
+        if (target >= 0 && target < NUM_WORKSPACES && target != (int)base.current_workspace)
+        switch_workspace(&target, base);
+        return;
+    }
+    Atom net_active_window = XInternAtom(base.display, "_NET_ACTIVE_WINDOW", False);
+    if (e->message_type == net_active_window) {
+        Window target_win = (Window)e->data.l[2];
+        if (!target_win) target_win = (Window)e->data.l[0];
+        for (auto &ws : base.workspaces) {
+            for (auto &w : ws.windows) {
+                if (w.window == target_win) {
+                    if (&ws - &base.workspaces[0] != (int)base.current_workspace) {
+                        int idx = (int)(&ws - &base.workspaces[0]);
+                        switch_workspace(&idx, base);
+                    }
+                    focus_window(&w, base);
+                    return;
+                }
+            }
+        }
+        return;
+    }
+
+    Atom net_close = XInternAtom(base.display, "_NET_CLOSE_WINDOW", False);
+    if (e->message_type == net_close) {
+        XEvent ev = {};
+        ev.type = ClientMessage;
+        ev.xclient.window = e->window;
+        ev.xclient.message_type = XInternAtom(base.display, "WM_PROTOCOLS", True);
+        ev.xclient.format = 32;
+        ev.xclient.data.l[0] = XInternAtom(base.display, "WM_DELETE_WINDOW", False);
+        ev.xclient.data.l[1] = CurrentTime;
+        XSendEvent(base.display, e->window, False, NoEventMask, &ev);
+        return;
+    }
 }
 
 void nwm::handle_key_press(XKeyEvent *e, Base &base) {
@@ -1933,6 +2087,7 @@ void nwm::setup_ewmh(Base &base) {
     XChangeProperty(base.display, check_win, net_wm_name, utf8_string, 8,
                    PropModeReplace, (unsigned char *)wm_name, strlen(wm_name));
 
+
     Atom supported[] = {
         net_supporting_wm_check,
         net_wm_name,
@@ -1945,8 +2100,11 @@ void nwm::setup_ewmh(Base &base) {
         XInternAtom(base.display, "_NET_WM_WINDOW_TYPE_SPLASH", False),
         XInternAtom(base.display, "_NET_ACTIVE_WINDOW", False),
         XInternAtom(base.display, "_NET_CLIENT_LIST", False),
+        XInternAtom(base.display, "_NET_CLIENT_LIST_STACKING", False),
         XInternAtom(base.display, "_NET_NUMBER_OF_DESKTOPS", False),
         XInternAtom(base.display, "_NET_CURRENT_DESKTOP", False),
+        XInternAtom(base.display, "_NET_DESKTOP_NAMES", False),
+        XInternAtom(base.display, "_NET_CLOSE_WINDOW", False),
     };
 
     XChangeProperty(base.display, base.root, net_supported, XA_ATOM, 32,
@@ -1962,6 +2120,21 @@ void nwm::setup_ewmh(Base &base) {
     XChangeProperty(base.display, base.root, net_current_desktop, XA_CARDINAL, 32,
                    PropModeReplace, (unsigned char *)&current_desktop, 1);
 
+    {
+        Atom net_desktop_names = XInternAtom(base.display, "_NET_DESKTOP_NAMES", False);
+        Atom utf8_string = XInternAtom(base.display, "UTF8_STRING", False);
+        std::string packed;
+        for (size_t i = 0; i < (size_t)NUM_WORKSPACES; ++i) {
+            if (i < base.widget.size())
+                packed += base.widget[i];
+            else
+                packed += std::to_string(i + 1);
+            packed += '\0';
+        }
+        XChangeProperty(base.display, base.root, net_desktop_names, utf8_string, 8,
+                        PropModeReplace,
+                        (unsigned char*)packed.data(), (int)packed.size());
+    }
     XSync(base.display, False);
 
     base.hint_check_window = check_win;
@@ -2139,6 +2312,7 @@ void nwm::init(Base &base) {
             }
         }
     }
+    update_struts(base);
     bar_draw(base);
 }
 
@@ -2449,6 +2623,7 @@ void nwm::manage_window(Window window, Base &base) {
     }
 
     XFlush(base.display);
+    ewmh_update_client_list(base);
 }
 
 void nwm::run(Base &base) {

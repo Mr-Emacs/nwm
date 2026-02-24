@@ -139,6 +139,8 @@ struct Base {
     int xrandr_event_base;
     bool use_xinerama;
     bool use_builtin_bar;
+    struct StrutReservation { int left, right, top, bottom; };
+    std::vector<StrutReservation> struts;
 };
 
 void manage_window(Window window, Base &base);
@@ -154,8 +156,11 @@ void quit_wm(void *arg, Base &base);
 void toggle_gap(void *arg, Base &base);
 void toggle_toggle(void *arg, Base &base);
 void toggle_bar(void *arg, Base &base);
+void update_struts(Base &base);
+
 void toggle_float(void *arg, Base &base);
 void toggle_fullscreen(void *arg, Base &base);
+void ewmh_update_client_list(Base &base);
 
 void toggle_layout(void *arg, Base &base);
 void swap_prev(void *arg, Base &base);
