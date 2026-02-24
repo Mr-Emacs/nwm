@@ -13,6 +13,45 @@
 #include <algorithm>
 #include <unistd.h>
 
+static const char *VERT_SRC = R"glsl(
+#version 330 core
+
+layout(location = 0) in vec2 a_pos;
+
+out vec2 v_uv;
+
+uniform float u_scale;
+uniform vec2  u_offset;
+
+void main() {
+    vec2 uv = a_pos * 0.5 + 0.5;
+
+    // NOTE: X11 stores rows top-to-bottom; OpenGL textures are bottom-to-top, so flip Y
+    uv.y = 1.0 - uv.y;
+    v_uv = (uv - 0.5) / u_scale + 0.5 + u_offset;
+
+    gl_Position = vec4(a_pos, 0.0, 1.0);
+}
+)glsl";
+
+static const char *FRAG_SRC = R"glsl(
+#version 330 core
+
+in  vec2 v_uv;
+out vec4 frag_color;
+
+uniform sampler2D u_texture;
+
+void main() {
+    if (any(lessThan(v_uv, vec2(0.0))) || any(greaterThan(v_uv, vec2(1.0)))) {
+        frag_color = vec4(0.0, 0.0, 0.0, 1.0);
+        return;
+    }
+
+    frag_color = texture(u_texture, v_uv);
+}
+)glsl";
+
 struct App {
     Display   *dpy = nullptr;
     int        scr = 0;
@@ -34,19 +73,10 @@ struct Camera {
     float scale = 1.f;
 };
 
-static std::string read_file(const std::string &path) {
-    std::ifstream f(path);
-    if (!f) { std::printf("ERROR: Cannot open file: %s\n", path.c_str()); return {}; }
-    std::ostringstream ss;
-    ss << f.rdbuf();
-    return ss.str();
-}
-
-static GLuint compile_shader(const std::string &src, GLenum kind) {
-    if (src.empty()) return 0;
+static GLuint compile_shader(const char *src, GLenum kind) {
+    if (!src || src[0] == '\0') return 0;
     GLuint shader = glCreateShader(kind);
-    const char *p = src.c_str();
-    glShaderSource(shader, 1, &p, nullptr);
+    glShaderSource(shader, 1, &src, nullptr);
     glCompileShader(shader);
     GLint ok = 0;
     glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
@@ -61,9 +91,9 @@ static GLuint compile_shader(const std::string &src, GLenum kind) {
     return shader;
 }
 
-static GLuint make_program(const char *vert_path, const char *frag_path) {
-    GLuint v = compile_shader(read_file(vert_path), GL_VERTEX_SHADER);
-    GLuint f = compile_shader(read_file(frag_path), GL_FRAGMENT_SHADER);
+static GLuint make_program() {
+    GLuint v = compile_shader(VERT_SRC, GL_VERTEX_SHADER);
+    GLuint f = compile_shader(FRAG_SRC, GL_FRAGMENT_SHADER);
     if (!v || !f) return 0;
     GLuint prog = glCreateProgram();
     glAttachShader(prog, v);
@@ -148,7 +178,7 @@ static XImage *capture_screen(App &app) {
         }
 
         if (!is_mostly_black(app, img)) {
-           if (attempt > 0)
+            if (attempt > 0)
                 std::printf("Captured screen after %d retries\n", attempt);
             return img;
         }
@@ -244,7 +274,7 @@ int main() {
     XDestroyImage(raw);
     if (!tex) return 1;
 
-    GLuint prog = make_program("./vert.glsl", "./frag.glsl");
+    GLuint prog = make_program();
     if (!prog) return 1;
 
     GLuint vao = make_quad();

@@ -2557,7 +2557,7 @@ int main(int argc, char **argv) {
   nwm::run(wm);
   nwm::cleanup(wm);
   if (wm.restart == true) {
-    execv(*argv, argv);
-    perror("Failed to execv");
+    execvp(argv[0], argv);
+    perror("Failed to execvp");
   }
 }
