@@ -773,27 +773,23 @@ void nwm::toggle_fullscreen(void *arg, Base &base)
 {
     (void)arg;
     if (!base.focused_window) return;
-
     auto &current_ws = get_current_workspace(base);
     for (auto &w : current_ws.windows) {
         if (w.window == base.focused_window->window) {
             w.is_fullscreen = !w.is_fullscreen;
-
             if (w.is_fullscreen) {
                 w.pre_fs_x = w.x;
                 w.pre_fs_y = w.y;
                 w.pre_fs_width = w.width;
                 w.pre_fs_height = w.height;
                 w.pre_fs_floating = w.is_floating;
-
                 Monitor *mon = get_monitor_at_point(base, w.x + w.width / 2, w.y + w.height / 2);
                 if (!mon) mon = get_current_monitor(base);
                 if (!mon) return;
-
+                XUnmapWindow(base.display, base.bar.window);
                 XSetWindowBorderWidth(base.display, w.window, 0);
                 XMoveResizeWindow(base.display, w.window, mon->x, mon->y, mon->width, mon->height);
                 XRaiseWindow(base.display, w.window);
-
                 Atom wm_state = XInternAtom(base.display, "_NET_WM_STATE", False);
                 Atom fullscreen = XInternAtom(base.display, "_NET_WM_STATE_FULLSCREEN", False);
                 XChangeProperty(base.display, w.window, wm_state, XA_ATOM, 32,
@@ -801,10 +797,10 @@ void nwm::toggle_fullscreen(void *arg, Base &base)
             } else {
                 w.is_floating = w.pre_fs_floating;
                 XSetWindowBorderWidth(base.display, w.window, base.border_width);
-
+                XMapWindow(base.display, base.bar.window);
+                XRaiseWindow(base.display, base.bar.window);
                 Atom wm_state = XInternAtom(base.display, "_NET_WM_STATE", False);
                 XDeleteProperty(base.display, w.window, wm_state);
-
                 if (base.horizontal_mode) {
                     tile_horizontal(base);
                 } else {
@@ -814,7 +810,6 @@ void nwm::toggle_fullscreen(void *arg, Base &base)
             break;
         }
     }
-
     XFlush(base.display);
 }
 
@@ -1541,6 +1536,38 @@ void nwm::handle_client_message(XClientMessageEvent *e, Base &base)
         ev.xclient.data.l[0] = XInternAtom(base.display, "WM_DELETE_WINDOW", False);
         ev.xclient.data.l[1] = CurrentTime;
         XSendEvent(base.display, e->window, False, NoEventMask, &ev);
+        return;
+    }
+    Atom net_wm_state = XInternAtom(base.display, "_NET_WM_STATE", False);
+    Atom net_wm_state_fs = XInternAtom(base.display, "_NET_WM_STATE_FULLSCREEN", False);
+    if (e->message_type == net_wm_state) {
+        long action = e->data.l[0]; // NOTE: 0=removes, 1=adds, 2=toggles
+        Atom prop1  = (Atom)e->data.l[1];
+        Atom prop2  = (Atom)e->data.l[2];
+
+        if (prop1 == net_wm_state_fs || prop2 == net_wm_state_fs) {
+            for (auto &ws : base.workspaces) {
+                for (auto &w : ws.windows) {
+                    if (w.window == e->window) {
+                        bool currently_fs = w.is_fullscreen;
+                        bool should_fs;
+                        if (action == 1) should_fs = true;
+                        else if (action == 0) should_fs = false;
+                        else should_fs = !currently_fs;
+
+                        if (should_fs != currently_fs) {
+                            // TODO: temporarily focus this window so toggle_fullscreen acts on it
+                            ManagedWindow *prev_focused = base.focused_window;
+                            base.focused_window = &w;
+                            toggle_fullscreen(nullptr, base);
+                            if (!should_fs && prev_focused)
+                                base.focused_window = prev_focused;
+                        }
+                        return;
+                    }
+                }
+            }
+        }
         return;
     }
 }
@@ -2639,7 +2666,7 @@ void nwm::manage_window(Window window, Base &base)
                 w.height = attr.height;
             }
         }
-        
+
         bool force_center = is_typed_float(base.display, window);
         bool has_user_pos = false;
         XSizeHints pos_hints;
