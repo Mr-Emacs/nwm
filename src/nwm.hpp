@@ -2,8 +2,8 @@
 #define NWM_HPP
 
 #define MAJOR_VERSION 1
-#define MINOR_VERSION 0
-#define PATCH_VERSION 0
+#define MINOR_VERSION 1
+#define PATCH_VERSION 1
 
 #include <X11/Xlib.h>
 #include <X11/cursorfont.h>
